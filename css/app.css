@@ -341,6 +341,55 @@ body[data-sekme="harita"] .ust-bar { display: none; }
 .leaflet-bottom.leaflet-right { margin-bottom: 0; }
 body[data-sekme="harita"] .leaflet-control-zoom { display: none; }
 
+/* Sera içi şema */
+.h-ust-seg { top: calc(var(--ust) + 8px); }
+.h-ust-alt { top: calc(var(--ust) + 60px); }
+.h-ust-seg + .h-ust-alt ~ .h-sag { top: calc(var(--ust) + 114px); }
+.harita-seg { width: 100%; box-shadow: 0 2px 10px rgba(0,0,0,.25); background: var(--yuzey-2); margin: 0; }
+.harita-seg button { min-height: 38px; font-size: 14px; }
+.sema-kap { position: fixed; left: 0; right: 0; top: 0; bottom: calc(63px + var(--alt)); z-index: 1; background: var(--zemin); }
+.sema-ust { position: absolute; z-index: 5; top: calc(var(--ust) + 8px); left: 12px; right: 12px; }
+.sema { position: absolute; left: 0; top: calc(var(--ust) + 54px); width: 100%; height: calc(66% - var(--ust) - 54px); touch-action: none; }
+.sema-kap .h-alt { max-height: 36%; }
+.sema-sag { top: calc(var(--ust) + 64px); z-index: 5; }
+.sema-sag .h-yuvarlak { width: 40px; height: 40px; }
+.s-sera { fill: var(--yuzey); stroke: var(--metin); stroke-width: 3; }
+.s-sera2 { stroke: #e03131; }
+.s-sera-et { font: 700 15px -apple-system, sans-serif; fill: var(--ince); letter-spacing: .08em; }
+.s-giris { font: 700 13px -apple-system, sans-serif; fill: var(--ana); }
+.s-giris-ok { fill: none; stroke: var(--ana); stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; }
+.s-kutu { fill: var(--yuzey-2); stroke: var(--metin); stroke-width: 2.5; }
+.s-sera2 ~ .s-sektor .s-kutu { stroke-width: 2.5; }
+.s-gutter { stroke: rgba(0,0,0,.18); stroke-width: .25; cursor: pointer; }
+.s-bir { font: 700 7px -apple-system, sans-serif; fill: var(--metin); opacity: .7; pointer-events: none; }
+.s-sektor-et-bg { fill: var(--yuzey); stroke: var(--cizgi); stroke-width: 1; cursor: pointer; }
+.s-sektor-et { font: 700 9px -apple-system, sans-serif; fill: var(--metin); cursor: pointer; }
+.s-ad { font: 700 8px -apple-system, sans-serif; fill: #fff; paint-order: stroke; stroke: rgba(0,0,0,.55); stroke-width: 2px; }
+.s-ad.soluk { opacity: .25; }
+.s-donus { fill: none; stroke-width: 2; stroke-dasharray: 4 3; }
+.s-donus.secili { stroke-width: 3.5; }
+.s-donus.soluk { opacity: .15; }
+.nokta-renk { display: inline-block; width: 12px; height: 12px; border-radius: 50%; margin-right: 6px; vertical-align: -1px; flex: none; }
+.sema-parca { font-size: 14px; font-weight: 600; margin: 4px 0; }
+.yesil { color: var(--ana); }
+.liste.kompakt li { padding: 6px 0; }
+.liste-btn { width: 100%; display: flex; justify-content: space-between; align-items: center; gap: 10px; border: 0; background: transparent; text-align: left; padding: 4px 0; }
+.liste-btn > span:first-child { display: grid; grid-template-columns: auto 1fr; align-items: center; }
+.liste-btn > span:first-child small { grid-column: 2; color: var(--ince); font-size: 12px; }
+.grup-baslik { margin: 14px 0 0; font-size: 14px; color: var(--ince); }
+.kisi-ad .yerlesim { display: block; color: var(--ana); }
+.sektor-ust { padding: 0 0 6px; }
+.sektor-kaydir { overflow-x: auto; margin: 0 -16px; padding: 0 16px 10px; -webkit-overflow-scrolling: touch; }
+.sektor-svg { display: block; }
+.d-gutter { cursor: pointer; }
+.d-sayi { font: 700 12px -apple-system, sans-serif; fill: #fff; paint-order: stroke; stroke: rgba(0,0,0,.45); stroke-width: 2px; }
+.d-no { font: 700 11px -apple-system, sans-serif; fill: var(--metin); }
+.d-harf { font: 600 9px -apple-system, sans-serif; fill: var(--ince); }
+.d-fark { font: 700 10px -apple-system, sans-serif; }
+.d-fark.eksi { fill: var(--kirmizi); }
+.d-fark.arti { fill: var(--ana); }
+.d-ad { font: 700 11px -apple-system, sans-serif; fill: #fff; }
+
 @media (max-width: 370px) {
   .sayilar { grid-template-columns: 64px 1fr 64px; }
   .seg button { padding: 7px 6px; font-size: 12px; }

@@ -103,6 +103,8 @@
   // ---------- Ekran ----------
   function ciz() {
     const ekran = $('#ekran');
+    // Varsayılan görünüm: sera içi şema (sema.js)
+    if ((ui.haritaGorunum || 'sema') === 'sema' && window.Sema) return window.Sema.ciz();
     if (typeof L === 'undefined') {
       ekran.innerHTML = `<div class="bos"><h2>Harita yüklenemedi</h2><p>Sayfayı yenileyin.</p></div>`;
       return;
@@ -110,7 +112,8 @@
     ekran.innerHTML = `
       <div class="harita-kap">
         <div id="harita"></div>
-        <div class="h-ust">
+        <div class="h-ust h-ust-seg">${window.Sema ? window.Sema.segmentHtml('uydu') : ''}</div>
+        <div class="h-ust h-ust-alt">
           <select id="h-sera" aria-label="Sera">${['<option value="">Tüm seralar</option>']
             .concat(S.d.seralar.map((s) => `<option value="${s.id}" ${s.id === seciliSera() ? 'selected' : ''}>${esc(s.ad)}${s.sinir ? '' : ' (sınır yok)'}</option>`))
             .join('')}</select>

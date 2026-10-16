@@ -669,6 +669,11 @@
         <button class="btn birincil genis" id="r-hasat">${ikon('excel')} Hasat tahmini Excel oluştur</button>
       </section>
       <section class="panel">
+        <h2>${ikon('hasat')} Bitki Sayımı</h2>
+        <p class="ince">Kişi bazında tünel / gutter / bitki sayısı (bitki sayısı dosyanızın düzeninde), son 4 sayım yan yana, fark ve toplam bitki kaybı.</p>
+        <button class="btn birincil genis" id="r-bitki">${ikon('excel')} Bitki sayımı Excel oluştur</button>
+      </section>
+      <section class="panel">
         <h2>${ikon('ilac')} İlaçlama Kayıt Defteri</h2>
         <p class="ince">İlaç, etken madde, hedef, doz, uygulayan, bekleme süresi ve hasat için uygun tarih.</p>
         <button class="btn birincil genis" id="r-ilac">${ikon('excel')} İlaçlama Excel oluştur</button>
@@ -701,6 +706,12 @@
     };
     $('#r-hasat').onclick = donemDosya('Hasat tahmini', R.hasatTahminRaporu);
     $('#r-ilac').onclick = donemDosya('İlaçlama kayıtları', R.ilaclamaRaporu);
+    $('#r-bitki').onclick = () =>
+      calis('Bitki sayımı', async () => {
+        if (!S.d.bitkiSayimlari.length) throw new Error('Henüz bitki sayımı yok. Ayarlar › Excel’den içe aktar ile bitki sayısı dosyasını yükleyin.');
+        const son = S.d.bitkiSayimlari.map((x) => x.tarih).sort().pop();
+        dosyaHazir(await R.blob(await R.bitkiRaporu()), `SERA 1 VE 2 BİTKİ SAYISI ${S.trTarih(son)}.xlsx`);
+      });
     $('#r-toplu').onclick = () => {
       const [y, m] = ($('#r-ay').value || ui.ay).split('-').map(Number);
       calis('Toplu rapor', async () => {
@@ -848,7 +859,7 @@
           <ul class="kisi-liste">${kisiler
             .map(
               (p, i) => `<li class="${p.aktif ? '' : 'pasif'}" data-pid="${p.id}">
-              <button class="kisi-ad" data-p="kisi">${esc(p.ad)}<small>${esc(p.siraMetni || '')}${p.toplamSira !== null ? ' · ' + S.sayiYaz(p.toplamSira) + ' sıra' : ''}${p.aktif ? '' : ' · pasif'}</small></button>
+              <button class="kisi-ad" data-p="kisi">${esc(p.ad)}<small>${esc(p.siraMetni || '')}${p.toplamSira !== null ? ' · ' + S.sayiYaz(p.toplamSira) + ' sıra' : ''}${p.aktif ? '' : ' · pasif'}</small>${yerlesimOzeti(p)}</button>
               <button class="ikon-btn" data-p="yukari" ${i === 0 ? 'disabled' : ''} aria-label="Yukarı">${ikon('yukari')}</button>
               <button class="ikon-btn" data-p="asagi" ${i === kisiler.length - 1 ? 'disabled' : ''} aria-label="Aşağı">${ikon('asagi')}</button>
             </li>`
@@ -933,6 +944,14 @@
     }
   });
 
+  function yerlesimOzeti(p) {
+    const l = S.kisiGutterlari(p.id);
+    if (!l.length) return '';
+    const sek = Array.from(new Set(l.map((g) => S.sektorAdi(g.seraId, g.harf).replace('Sektör ', '')))).join('-');
+    const b = S.kisiBitki(p.id);
+    return `<small class="yerlesim">Sektör ${esc(sek)} · ${l.length} gutter${b.son !== null ? ' · ' + b.son.toLocaleString('tr-TR') + ' bitki' : ''}${b.fark ? ` <b class="${b.fark < 0 ? 'kirmizi' : ''}">(${b.fark > 0 ? '+' : ''}${b.fark})</b>` : ''}</small>`;
+  }
+
   function kisiDuzenle(pid, seraId) {
     const p = pid ? S.kisi(pid) : { ad: '', seraId, siraMetni: '', toplamSira: null, aktif: true };
     sayfaAc(
@@ -993,7 +1012,7 @@
       ${yedekHatirlat() ? `<div class="uyari-bant">Son yedeğin üzerinden 7 günden fazla geçti. Verileriniz sadece bu telefonda; lütfen yedek alın.</div>` : ''}
       <section class="panel">
         <h2>${ikon('yukle')} Excel'den içe aktar</h2>
-        <p class="ince">Mevcut <b>günlük rapor</b> (SERA GÜNLÜK RAPOR …) veya <b>aylık personel raporu</b> (… AYI SERA 1 RAPOR) dosyalarını seçin. Seralar, personel, sıra sayıları ve o günlerin kayıtları otomatik eklenir. Birden fazla dosya seçebilirsiniz.</p>
+        <p class="ince">Mevcut <b>günlük rapor</b> (SERA GÜNLÜK RAPOR …), <b>aylık personel raporu</b> (… AYI SERA 1 RAPOR) veya <b>bitki sayısı</b> (SERA 1 VE 2 BİTKİ SAYISI) dosyalarını seçin. Seralar, personel, sıra sayıları ve o günlerin kayıtları otomatik eklenir. Birden fazla dosya seçebilirsiniz.</p>
         <button class="btn birincil genis" data-a="ice-aktar">Excel dosyası seç</button>
       </section>
       <section class="panel">
@@ -1019,7 +1038,7 @@
       </section>
       <section class="panel">
         <button class="btn tehlike genis" id="sifirla">Tüm verileri sil</button>
-        <p class="ince orta">Sera Otomasyon · v1.2</p>
+        <p class="ince orta">Sera Otomasyon · v1.3</p>
       </section>`;
 
     $('#git-personel').onclick = () => {
@@ -1110,7 +1129,14 @@
           const ist = R.aylikIceAktar(wb, seraId);
           return `${f.name}: aylık rapor – ${ist.sayfa} sayfa, ${ist.personel} yeni personel, ${ist.kayit} günlük kayıt`;
         }
-        return `${f.name}: tanınmayan biçim (A1 hücresi “PERSONELLER” veya “PERSONEL: …” olmalı)`;
+        if (tur === 'bitki') {
+          const ist = R.bitkiIceAktar(wb.worksheets[0], S.tarihStr(new Date()));
+          let m = `${f.name}: bitki sayımı (${S.trTarih(ist.tarih)}) – ${ist.kisi} kişi, ${ist.gutter} gutter, ${ist.bitki.toLocaleString('tr-TR')} bitki${ist.yeniKisi ? ', ' + ist.yeniKisi + ' yeni personel' : ''}. Yerleşim “Harita › Sera İçi”nde.`;
+          if (ist.kayip.length) m += ` En çok değişen: ${ist.kayip.slice(0, 5).map((x) => `${x.p.ad} ${x.fark > 0 ? '+' : ''}${x.fark}`).join(', ')}.`;
+          if (ist.cakisma.length) m += ` Paylaşılan gutter (yarım sıra) ${ist.cakisma.length} adet: ${ist.cakisma.slice(0, 6).join('; ')}${ist.cakisma.length > 6 ? ' …' : ''}.`;
+          return m;
+        }
+        return `${f.name}: tanınmayan biçim (A1 hücresi “PERSONELLER”, “PERSONEL: …” veya bitki sayısı tablosu olmalı)`;
       });
       if (r) sonuc.push(r);
     }
