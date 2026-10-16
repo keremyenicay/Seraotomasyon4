@@ -43,6 +43,7 @@
       sektorler: [],
       yerlesim: {},
       bitkiSayimlari: [],
+      karantina: {},
       ayarlar: { pazarTatil: true, sonYedek: null, kurulum: new Date().toISOString() },
     };
   }
@@ -77,6 +78,12 @@
     d.sektorler = Array.isArray(d.sektorler) ? d.sektorler : [];
     d.yerlesim = d.yerlesim && typeof d.yerlesim === 'object' ? d.yerlesim : {};
     d.bitkiSayimlari = Array.isArray(d.bitkiSayimlari) ? d.bitkiSayimlari : [];
+    d.karantina = d.karantina && typeof d.karantina === 'object' ? d.karantina : {};
+    // Silinmiş personelden kalan yerleşimleri temizle
+    const pidler = new Set(d.personel.map((p) => p.id));
+    Object.keys(d.yerlesim).forEach((pid) => {
+      if (!pidler.has(pid) || !Array.isArray(d.yerlesim[pid]) || !d.yerlesim[pid].length) delete d.yerlesim[pid];
+    });
     return d;
   }
 
@@ -342,6 +349,8 @@
   }
   // Bir harfteki gutter sayısı = yerleşimdeki en büyük numara (yoksa 60)
   function gutterSayisi(seraId, harf) {
+    const sk = sektorBul(seraId, harf);
+    if (sk && sk.gutterSayilari && sk.gutterSayilari[harf]) return sk.gutterSayilari[harf];
     let max = 0;
     Object.values(durum.yerlesim).forEach((l) => l.forEach((g) => g.seraId === seraId && g.harf === harf && g.gutter > max && (max = g.gutter)));
     durum.bitkiSayimlari.forEach((sy) => {
@@ -356,14 +365,101 @@
     return durum.yerlesim[pid] || [];
   }
   function gutterSahipleri(seraId, harf, no) {
+    return gutterDilimleri(seraId, harf, no).map((x) => x.p);
+  }
+  // Gutter'ı kimler, hangi taraftan çalışıyor: [{p, taraf:'sol'|'sag'|null, kayit}] (sol → sağ sırasıyla)
+  // Taraf girilmemiş iki kişi varsa ilki sol, ikincisi sağ sayılır.
+  function gutterDilimleri(seraId, harf, no) {
     const l = [];
     Object.entries(durum.yerlesim).forEach(([pid, gs]) => {
-      if (gs.some((g) => g.seraId === seraId && g.harf === harf && g.gutter === no)) {
-        const p = kisi(pid);
-        if (p) l.push(p);
+      const kayit = gs.find((g) => g.seraId === seraId && g.harf === harf && g.gutter === no);
+      const p = kayit && kisi(pid);
+      if (p) l.push({ p, taraf: kayit.taraf || null, kayit });
+    });
+    if (l.length > 1) {
+      const dolu = new Set(l.map((x) => x.taraf).filter(Boolean));
+      l.forEach((x) => {
+        if (!x.taraf) {
+          x.taraf = dolu.has('sol') ? 'sag' : 'sol';
+          dolu.add(x.taraf);
+        }
+      });
+      l.sort((a, b) => (a.taraf === b.taraf ? 0 : a.taraf === 'sol' ? -1 : 1));
+    }
+    return l;
+  }
+  function tunelTahmin(seraId, harf, no) {
+    for (const l of Object.values(durum.yerlesim)) {
+      const x = l.find((g) => g.seraId === seraId && g.harf === harf && g.gutter === no);
+      if (x && x.tunel) return x.tunel;
+    }
+    return `${Math.max(1, Math.ceil(no / 6))}-${harf}`;
+  }
+  // Kişinin listesine gutter'ı en yakın komşusunun yanına ekle (sıra / dönüş düzeni korunur)
+  function yerlesimeEkle(pid, kayit) {
+    const l = (durum.yerlesim[pid] = durum.yerlesim[pid] || []);
+    let en = -1;
+    let enD = Infinity;
+    l.forEach((gt, i) => {
+      if (gt.seraId === kayit.seraId && gt.harf === kayit.harf && Math.abs(gt.gutter - kayit.gutter) < enD) {
+        enD = Math.abs(gt.gutter - kayit.gutter);
+        en = i;
       }
     });
-    return l;
+    if (en < 0) return l.push(kayit);
+    const ayni = (x) => x && x.harf === kayit.harf && x.seraId === kayit.seraId;
+    const yon = ayni(l[en + 1]) ? Math.sign(l[en + 1].gutter - l[en].gutter) : ayni(l[en - 1]) ? Math.sign(l[en].gutter - l[en - 1].gutter) : 1;
+    l.splice((kayit.gutter - l[en].gutter) * yon > 0 ? en + 1 : en, 0, kayit);
+  }
+  function kisidenCikar(pid, seraId, harf, no) {
+    if (!durum.yerlesim[pid]) return;
+    durum.yerlesim[pid] = durum.yerlesim[pid].filter((g) => !(g.seraId === seraId && g.harf === harf && g.gutter === no));
+    if (!durum.yerlesim[pid].length) delete durum.yerlesim[pid];
+  }
+  // Gutter'ı ata. pid null → boşalt. taraf null → tüm sıra (diğerleri çıkar); 'sol'/'sag' → sadece o taraf.
+  function gutterAta(seraId, harf, no, pid, taraf) {
+    const dilim = gutterDilimleri(seraId, harf, no);
+    if (!taraf) {
+      dilim.forEach((x) => x.p.id !== pid && kisidenCikar(x.p.id, seraId, harf, no));
+    } else {
+      dilim.forEach((x) => {
+        if (x.p.id === pid) return;
+        if (x.taraf === taraf) kisidenCikar(x.p.id, seraId, harf, no);
+        else x.kayit.taraf = x.taraf; // karşı tarafı kalıcı yaz
+      });
+    }
+    if (!pid) return;
+    const mevcut = (durum.yerlesim[pid] || []).find((g) => g.seraId === seraId && g.harf === harf && g.gutter === no);
+    if (mevcut) mevcut.taraf = taraf || null;
+    else yerlesimeEkle(pid, { seraId, harf, gutter: no, tunel: tunelTahmin(seraId, harf, no), etiket: '', taraf: taraf || null });
+  }
+
+  // ---- Karantina sıraları ----
+  function karantinaMi(seraId, harf, no) {
+    const k = durum.karantina[seraId];
+    return !!(k && k[harf + no]);
+  }
+  function karantinaAyarla(seraId, harf, no, acik, not) {
+    const k = (durum.karantina[seraId] = durum.karantina[seraId] || {});
+    if (acik) k[harf + no] = { tarih: (k[harf + no] && k[harf + no].tarih) || tarihStr(new Date()), not: not || '' };
+    else delete k[harf + no];
+  }
+  function karantinaListesi(seraId) {
+    const out = [];
+    Object.entries(durum.karantina).forEach(([sid, k]) => {
+      if (seraId && sid !== seraId) return;
+      Object.entries(k).forEach(([key, v]) => {
+        const harf = key[0];
+        const no = parseInt(key.slice(1), 10);
+        out.push({ seraId: sid, harf, no, tarih: v.tarih, not: v.not, kisiler: gutterSahipleri(sid, harf, no) });
+      });
+    });
+    return out.sort((a, b) => (a.seraId + a.harf + String(a.no).padStart(3, '0') < b.seraId + b.harf + String(b.no).padStart(3, '0') ? -1 : 1));
+  }
+  function kisiKarantina(pid) {
+    return kisiGutterlari(pid)
+      .filter((g) => karantinaMi(g.seraId, g.harf, g.gutter))
+      .map((g) => g.harf + g.gutter);
   }
   function sayimlar(seraId) {
     return durum.bitkiSayimlari.filter((x) => x.seraId === seraId).sort((a, b) => (a.tarih < b.tarih ? -1 : 1));
@@ -429,11 +525,12 @@
     const out = [];
     kisiGutterlari(pid).forEach((g) => {
       const son = out[out.length - 1];
-      if (son && son.seraId === g.seraId && son.harf === g.harf && Math.abs(g.gutter - son.bit) === 1 && (son.adet === 1 || Math.sign(g.gutter - son.bit) === son.yon)) {
+      const taraf = g.taraf || null;
+      if (son && son.seraId === g.seraId && son.harf === g.harf && son.taraf === taraf && Math.abs(g.gutter - son.bit) === 1 && (son.adet === 1 || Math.sign(g.gutter - son.bit) === son.yon)) {
         son.yon = Math.sign(g.gutter - son.bit);
         son.bit = g.gutter;
         son.adet++;
-      } else out.push({ seraId: g.seraId, harf: g.harf, bas: g.gutter, bit: g.gutter, adet: 1, yon: 0 });
+      } else out.push({ seraId: g.seraId, harf: g.harf, bas: g.gutter, bit: g.gutter, adet: 1, yon: 0, taraf });
     });
     return out;
   }
@@ -529,6 +626,15 @@
     gutterSayisi,
     kisiGutterlari,
     gutterSahipleri,
+    gutterDilimleri,
+    tunelTahmin,
+    yerlesimeEkle,
+    kisidenCikar,
+    gutterAta,
+    karantinaMi,
+    karantinaAyarla,
+    karantinaListesi,
+    kisiKarantina,
     sayimlar,
     sonSayim,
     oncekiSayim,

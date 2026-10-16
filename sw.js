@@ -1,5 +1,5 @@
 /* Çevrimdışı çalışma için önbellek */
-const SURUM = 'sera-v1.3.0';
+const SURUM = 'sera-v1.4.0';
 const DOSYALAR = [
   './',
   'index.html',

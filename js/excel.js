@@ -780,6 +780,14 @@
     // Önceki toplamlar (kayıp hesabı için)
     const onceKisi = {};
     Object.keys(yeniYer).forEach((pid) => (onceKisi[pid] = S.kisiBitki(pid).son));
+    // Önceki elle girilmiş taraf bilgisini koru
+    Object.entries(yeniYer).forEach(([pid, l]) => {
+      const eski = S.d.yerlesim[pid] || [];
+      l.forEach((g) => {
+        const e = eski.find((x) => x.seraId === g.seraId && x.harf === g.harf && x.gutter === g.gutter);
+        if (e && e.taraf) g.taraf = e.taraf;
+      });
+    });
     Object.entries(yeniYer).forEach(([pid, l]) => {
       S.d.yerlesim[pid] = l;
       const p = S.kisi(pid);
@@ -797,9 +805,18 @@
     Object.keys(yeniYer).forEach((pid) => {
       const once = onceKisi[pid];
       const simdi = S.kisiBitki(pid).son;
-      if (once !== null && simdi !== null && once !== simdi) ist.kayip.push({ p: S.kisi(pid), fark: simdi - once });
+      if (once !== null && simdi !== null && once !== simdi && S.kisi(pid)) ist.kayip.push({ p: S.kisi(pid), fark: simdi - once });
     });
     ist.kayip.sort((x, y) => x.fark - y.fark);
+    // Aynı gutter'da iki kişi: taraf girilmemişse dosyadaki sıraya göre sol / sağ yaz
+    const ikili = {};
+    Object.entries(yeniYer).forEach(([pid, l]) => l.forEach((g) => (ikili[g.seraId + '|' + g.harf + g.gutter] = (ikili[g.seraId + '|' + g.harf + g.gutter] || []).concat(g))));
+    Object.values(ikili).forEach((l) => {
+      if (l.length === 2 && !l[0].taraf && !l[1].taraf) {
+        l[0].taraf = 'sol';
+        l[1].taraf = 'sag';
+      }
+    });
     // Aynı gutter'ı birden fazla kişi kullanıyor mu?
     const sahip = {};
     Object.entries(S.d.yerlesim).forEach(([pid, l]) =>
@@ -824,7 +841,8 @@
     const tarihler = Array.from(new Set(S.d.bitkiSayimlari.map((x) => x.tarih))).sort().slice(-4);
     const tk = (t) => t.slice(8, 10) + '.' + t.slice(5, 7) + '.' + t.slice(2, 4);
     const nSut = 2 + tarihler.length + (tarihler.length > 1 ? 1 : 0);
-    [26, 12].concat(tarihler.map(() => 18), tarihler.length > 1 ? [12] : []).forEach((w, i) => (ws.getColumn(i + 1).width = w));
+    const karKol = nSut + 1;
+    [26, 12].concat(tarihler.map(() => 18), tarihler.length > 1 ? [12] : [], [14]).forEach((w, i) => (ws.getColumn(i + 1).width = w));
     const L = (n) => ws.getColumn(n).letter;
     let r = 1;
     const kisiToplamSatirlari = [];
@@ -841,7 +859,7 @@
         .map((pid) => S.kisi(pid))
         .filter((p) => p && p.seraId === sera.id && S.d.yerlesim[p.id].length);
       if (!kisiler.length) return;
-      ws.mergeCells(r, 1, r, nSut);
+      ws.mergeCells(r, 1, r, karKol);
       const sb = ws.getCell(r, 1);
       sb.value = sera.ad;
       sb.font = { bold: true, size: 14 };
@@ -850,30 +868,38 @@
       kisiler.forEach((p) => {
         const l = S.d.yerlesim[p.id];
         const nolar = Array.from(new Set(l.map((g) => S.sektorAdi(g.seraId, g.harf).replace('Sektör ', ''))));
-        ws.mergeCells(r, 1, r, nSut);
+        ws.mergeCells(r, 1, r, karKol);
         const kb = ws.getCell(r, 1);
         kb.value = `${p.ad}-${nolar.join('-')}.SEKTÖR`;
         kb.font = { bold: true, size: 12 };
         kb.fill = dolgu(GRI);
         kb.border = KENAR;
         r++;
-        yaz(ws.getRow(r), ['TÜNEL NO', 'GUTTER NO'].concat(tarihler.map((t) => tk(t) + ' BİTKİ SAYISI'), tarihler.length > 1 ? ['FARK'] : []), { font: { bold: true } });
+        yaz(ws.getRow(r), ['TÜNEL NO', 'GUTTER NO'].concat(tarihler.map((t) => tk(t) + ' BİTKİ SAYISI'), tarihler.length > 1 ? ['FARK'] : [], ['KARANTİNA']), { font: { bold: true } });
         r++;
         const ilk = r;
         l.forEach((g) => {
-          const vals = [g.tunel, g.gutter].concat(
+          const vals = [g.tunel + (g.taraf ? (g.taraf === 'sol' ? ' (SOL)' : ' (SAĞ)') : ''), g.gutter].concat(
             tarihler.map((t) => {
               const sy = S.d.bitkiSayimlari.find((x) => x.seraId === g.seraId && x.tarih === t);
               return S.kisiGutterBitki(sy, p.id, g.harf, g.gutter);
             })
           );
           if (tarihler.length > 1) vals.push({ formula: `${L(nSut - 1)}${r}-${L(nSut - 2)}${r}` });
+          const kar = S.karantinaMi(g.seraId, g.harf, g.gutter);
+          vals.push(kar ? 'KARANTİNA' : null);
           yaz(ws.getRow(r), vals);
+          if (kar)
+            for (let c = 1; c <= karKol; c++) {
+              ws.getCell(r, c).fill = dolgu('FFFFD8D8');
+              if (c === karKol) ws.getCell(r, c).font = { bold: true, color: { argb: 'FFB3261E' } };
+            }
           r++;
         });
         const son = r - 1;
         const tv = ['TOPLAM SIRA-BİTKİ SAYISI', l.length].concat(tarihler.map((_, j) => ({ formula: `SUM(${L(3 + j)}${ilk}:${L(3 + j)}${son})` })));
         if (tarihler.length > 1) tv.push({ formula: `SUM(${L(nSut)}${ilk}:${L(nSut)}${son})` });
+        tv.push(null);
         yaz(ws.getRow(r), tv, { font: { bold: true }, fill: dolgu(MAVI) });
         kisiToplamSatirlari.push(r);
         r += 2;
@@ -885,6 +911,18 @@
       const kr = ws.getRow(r + 1);
       yaz(kr, ['BİTKİ KAYBI (' + tk(tarihler[tarihler.length - 2]) + ' → ' + tk(tarihler[tarihler.length - 1]) + ')', '', { formula: `${L(nSut - 2)}${r}-${L(nSut - 1)}${r}` }], { font: { bold: true, color: { argb: 'FFB3261E' } } });
     }
+    // Karantina listesi
+    const kl = S.karantinaListesi();
+    const wk = wb.addWorksheet('KARANTİNA SIRALARI');
+    const kb = ['SERA', 'SEKTÖR', 'TÜNEL NO', 'GUTTER NO', 'KİŞİ', 'TARİH', 'NOT'];
+    tabloBasligi(wk, 'KARANTİNA SIRALARI', kb, [12, 12, 12, 11, 34, 13, 30]);
+    kl.forEach((k, i) => {
+      const row = wk.getRow(3 + i);
+      [(S.sera(k.seraId) || {}).ad, S.sektorAdi(k.seraId, k.harf).replace('Sektör ', ''), S.tunelTahmin(k.seraId, k.harf, k.no), k.no, k.kisiler.map((p) => p.ad).join(', '), null, k.not || null].forEach((v, j) => (row.getCell(j + 1).value = v));
+      tarihHucre(row.getCell(6), k.tarih);
+      satirKenar(row, kb.length);
+    });
+    if (!kl.length) wk.getCell(3, 1).value = 'Karantina sırası yok.';
     return wb;
   }
 

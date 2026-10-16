@@ -23,9 +23,13 @@ iPhone'da çalışan, internetsiz de açılan sera iş takip uygulaması. Günl�
   - Tünel harfleri: Sera 1'de A=1, B=2, C=3, D=4. Sera 2'de A=5, B=6, C=7, D=8, E=9, F=10, G=11.
   - **Bitki sayısı Excel'i** (SERA 1 VE 2 BİTKİ SAYISI) içe aktarılınca herkesin tünel ve gutter'ları şemaya kendi rengiyle yerleşir.
   - İki sektöre yayılan kişilerde sıra sonundan dönüş oku çizilir (ör. A48–54 → C60–52). Yarım sıralar (paylaşılan gutter) iki kişi arasında bölünmüş görünür.
-  - Bir sıraya dokununca kişinin sektör/gutter aralığı, bitki sayısı, önceki sayıma göre farkı ve bugünkü işi açılır.
-  - Sektör detayında her gutter'ın bitki sayısı görünür; dokunarak sayı düzeltilir veya kişi değiştirilir. "Bugün sayım yap" ile yeni sayım açılır, kayıp otomatik hesaplanır.
-  - Bir sektörde 1. gutter yanlış kenardaysa "Numaralamayı ters çevir" ile düzeltilir.
+  - Bir sıraya dokununca kişinin sektör/gutter aralığı ve bugünkü işi açılır. Alttaki özet şeridi dokunarak açılıp kapanır (varsayılan kapalı, harita büyük).
+  - Görünümler: **Kişiler** (renkli yerleşim), **Bugünkü iş** (Günlük kayda göre yapılan yeşil, kalan turuncu, gelmeyen kırmızı) ve **Bitki sayımı** (sadece sayım yapılan günler).
+  - **Elle düzenleme:** kişi kartında “Sıralarını düzenle” ile başlangıç/bitiş gutter'ları yazılır (dönüş için 60 → 52 gibi). Sektör ekranındaki **Düzenle** modunda kişi fırçasıyla gutter'lara dokunarak atanır, **Aralık** ile iki gutter arası tek seferde boyanır. Çakışan sıralarda “diğerlerinden çıkar” ya da “sağ/sol paylaş” seçilir.
+  - **Sağ / sol taraf:** bir sıranın sol tarafını bir kişi, sağ tarafını başka kişi çalışabilir; gutter ikiye bölünmüş görünür.
+  - **Karantina sıraları:** gutter sayfasından ya da Karantina fırçasıyla işaretlenir; şemada kırmızı taralı görünür, kişinin Günlük kartında uyarı çıkar, Excel'de ayrı sütun ve “KARANTİNA SIRALARI” sayfası olur.
+  - **Bitki sayımı** her gün yapılmaz: “Bitki sayımları › Sayım modunu aç” ile tarih seçilir, sadece bu modda sayılar girilir; girilmeyen gutter'lar önceki sayımdan alınır, kayıp otomatik hesaplanır.
+  - Sektör ayarından gutter sayısı ve 1. gutter'ın hangi kenarda olduğu değiştirilebilir.
 - **Uydu haritası:**
   - Konumunuz mavi nokta olarak görünür; seraların sınırları bir kez çizilir (haritaya dokunarak ya da köşede durup “Konumumu ekle”) ve hangi serada olduğunuz yazılır.
   - **Sıra işaretleri:** her işçinin sıralarının başlangıç (B) ve bitiş (S) noktası konumla ya da haritaya dokunarak işaretlenir. Haritada her kişi kendi renginde çizgi ve adıyla görünür; dokununca sıra bilgisi ve bugünkü işi açılır.
