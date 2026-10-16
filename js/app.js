@@ -121,6 +121,10 @@
       asagi: '<path d="M6 9l6 6 6-6"/>',
       kalem: '<path d="M12 20h9M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4z"/>',
       yukle: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"/>',
+      defter: '<path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20V3H6.5A2.5 2.5 0 0 0 4 5.5z"/><path d="M4 19.5A2.5 2.5 0 0 0 6.5 22H20v-5"/><path d="M12 13c-2.5 0-4-1.8-4-4.5C10.7 8.5 12 10 12 13zm0 0c0-3 1.5-5 4-5 0 2.7-1.5 5-4 5"/>',
+      hasat: '<path d="M12 22c-4.4 0-8-3.1-8-7.5S7.6 7 12 7s8 3.1 8 7.5S16.4 22 12 22z"/><path d="M12 7c0-2 1-4 3-5M9 4c1.2.4 2.3 1.4 3 3"/>',
+      ilac: '<path d="M9 2h6M10 2v4l-5 9a4 4 0 0 0 3.5 6h7A4 4 0 0 0 19 15l-5-9V2"/><path d="M7 14h10"/>',
+      uyari: '<path d="M10.3 3.9L1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><path d="M12 9v4M12 17h.01"/>',
       gunes: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>',
     }[ad];
     return `<svg class="ik" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${p || ''}</svg>`;
@@ -129,6 +133,7 @@
   // ---------- Sekmeler ----------
   const SEKMELER = [
     ['gunluk', 'Günlük'],
+    ['defter', 'Defter'],
     ['rapor', 'Raporlar'],
     ['ozet', 'Özet'],
     ['personel', 'Personel'],
@@ -161,9 +166,10 @@
     if (!ui.seraId || !S.sera(ui.seraId)) ui.seraId = S.d.seralar[0] ? S.d.seralar[0].id : null;
     const ekran = $('#ekran');
     ekran.dataset.sekme = ui.sekme;
-    ({ gunluk: gunlukCiz, rapor: raporCiz, ozet: ozetCiz, personel: personelCiz, ayarlar: ayarlarCiz })[ui.sekme]();
+    (ekranlar[ui.sekme] || gunlukCiz)();
   }
 
+  const ekranlar = {};
   function seraCipleri(aktif, aksiyon, tumuSecenek) {
     const liste = (tumuSecenek ? [{ id: '', ad: 'TÜMÜ' }] : []).concat(S.d.seralar);
     return `<div class="cipler" role="tablist">${liste
@@ -317,6 +323,7 @@
           : ''
       }
       ${seraCipleri(ui.seraId, 'sera')}
+      ${beklemeBandi(ui.seraId, ui.tarih)}
       <section class="ozet-satir" id="gun-ozet">${gunOzeti()}</section>
       <section class="arac-cubugu">
         <button class="btn kucuk birincil" data-a="gunluk-excel">${ikon('excel')} Excel</button>
@@ -334,6 +341,14 @@
         .filter((p) => p.aktif)
         .map((p) => `<option value="${esc(p.ad)}">`)
         .join('')}</datalist>`;
+  }
+
+  function beklemeBandi(seraId, t) {
+    const liste = S.beklemeUyarilari(seraId, t);
+    if (!liste.length) return '';
+    return `<div class="bekleme-bant">${ikon('uyari')}<div><b>İlaç bekleme süresi – hasat yapılmamalı</b>${liste
+      .map((il) => `<span>${esc(il.ilac || 'İlaç')} (${esc(R.seraAdi(il.seraId))}) → <b>${S.trTarih(S.uygunTarih(il))}</b> tarihinden itibaren hasat edilebilir</span>`)
+      .join('')}</div></div>`;
   }
 
   function kartYenile(pid) {
@@ -640,6 +655,16 @@
         <button class="btn birincil genis" id="r-aylik">${ikon('excel')} Aylık Excel oluştur</button>
       </section>
       <section class="panel">
+        <h2>${ikon('hasat')} Hasat Raporu</h2>
+        <p class="ince">Seçilen ay ve sera için tüm hasat kayıtları (kasa, kg, ortalama, tutar), günlük kg özeti ve ürün/sınıf özeti.</p>
+        <button class="btn birincil genis" id="r-hasat">${ikon('excel')} Hasat Excel oluştur</button>
+      </section>
+      <section class="panel">
+        <h2>${ikon('ilac')} İlaçlama Kayıt Defteri</h2>
+        <p class="ince">İlaç, etken madde, hedef, doz, uygulayan, bekleme süresi ve hasat için uygun tarih.</p>
+        <button class="btn birincil genis" id="r-ilac">${ikon('excel')} İlaçlama Excel oluştur</button>
+      </section>
+      <section class="panel">
         <h2>${ikon('indir')} Toplu Günlük Raporlar</h2>
         <p class="ince">Seçilen aydaki kayıtlı her gün için günlük raporu tek Excel dosyasında (her gün bir sayfa) alın.</p>
         <button class="btn genis" id="r-toplu">${ikon('excel')} Ayın tüm günleri</button>
@@ -657,6 +682,16 @@
         dosyaHazir(await R.blob(wb), `${S.AYLAR[m - 1]} AYI ${sera ? sera.ad : 'TÜM SERALAR'} RAPOR.xlsx`);
       });
     };
+    const donemDosya = (tur, fn) => () => {
+      const [y, m] = ($('#r-ay').value || ui.ay).split('-').map(Number);
+      const sid = $('#r-sera').value || null;
+      calis(tur, async () => {
+        const wb = await fn(y, m - 1, sid);
+        dosyaHazir(await R.blob(wb), `${S.AYLAR[m - 1]} ${y} ${R.seraAdi(sid)} ${tur.toLocaleUpperCase('tr-TR')}.xlsx`);
+      });
+    };
+    $('#r-hasat').onclick = donemDosya('Hasat raporu', R.hasatRaporu);
+    $('#r-ilac').onclick = donemDosya('İlaçlama kayıtları', R.ilaclamaRaporu);
     $('#r-toplu').onclick = () => {
       const [y, m] = ($('#r-ay').value || ui.ay).split('-').map(Number);
       calis('Toplu rapor', async () => {
@@ -727,6 +762,7 @@
             .join('')}</tbody>
         </table></div>
       </section>
+      ${hasatOzetPaneli(y, m - 1, ui.seraId)}
       <section class="panel">
         <h2>İş türlerine göre tamamlanan sıra</h2>
         ${isler.length ? `<ul class="liste">${isler.map(([k, v]) => `<li><span>${esc(k)}</span><b>${S.sayiYaz(Math.round(v * 10) / 10)}</b></li>`).join('')}</ul>` : '<p class="ince">Bu ay kayıt yok.</p>'}
@@ -764,6 +800,31 @@
           ozetCiz();
         })
     );
+  }
+
+  function hasatOzetPaneli(y, ay, seraId) {
+    const h = R.donemKayitlari('hasatlar', y, ay, seraId);
+    const il = R.donemKayitlari('ilaclamalar', y, ay, seraId);
+    if (!h.length && !il.length) return '';
+    const kg = h.reduce((t, x) => t + (S.sayi(x.kg) || 0), 0);
+    const kasa = h.reduce((t, x) => t + (S.sayi(x.kasa) || 0), 0);
+    const urun = {};
+    h.forEach((x) => {
+      const k = S.trUpper(x.urun || '-');
+      urun[k] = (urun[k] || 0) + (S.sayi(x.kg) || 0);
+    });
+    return `<section class="panel">
+      <h2>${ikon('hasat')} Hasat ve ilaçlama</h2>
+      <ul class="liste">
+        <li><span>Toplam hasat</span><b>${S.sayiYaz(Math.round(kg * 10) / 10)} kg · ${S.sayiYaz(kasa)} kasa</b></li>
+        <li><span>Hasat yapılan gün</span><b>${new Set(h.map((x) => x.tarih)).size}</b></li>
+        ${Object.entries(urun)
+          .sort((a, b) => b[1] - a[1])
+          .map(([k, v]) => `<li><span>${esc(k)}</span><b>${S.sayiYaz(Math.round(v * 10) / 10)} kg</b></li>`)
+          .join('')}
+        <li><span>İlaçlama sayısı</span><b>${il.length}</b></li>
+      </ul>
+    </section>`;
   }
 
   // =====================================================================
@@ -948,7 +1009,7 @@
       </section>
       <section class="panel">
         <button class="btn tehlike genis" id="sifirla">Tüm verileri sil</button>
-        <p class="ince orta">Sera Otomasyon · v1.0</p>
+        <p class="ince orta">Sera Otomasyon · v1.1</p>
       </section>`;
 
     $('#y-al').onclick = () => {
@@ -1083,9 +1144,17 @@
   }
 
   // ---------- Başlat ----------
-  ciz();
+  Object.assign(ekranlar, { gunluk: gunlukCiz, rapor: raporCiz, ozet: ozetCiz, personel: personelCiz, ayarlar: ayarlarCiz });
+  // Diğer modüller (defter.js) ekranlarını yükledikten sonra çiz
+  document.addEventListener('DOMContentLoaded', ciz);
   if ('serviceWorker' in navigator && location.protocol !== 'file:') {
     navigator.serviceWorker.register('sw.js').catch((e) => console.warn('SW', e));
   }
-  window.SeraApp = { ui, ciz, iceAktar };
+  window.SeraApp = {
+    ui,
+    ciz,
+    iceAktar,
+    ekranlar,
+    yard: { esc, ikon, toast, sayfaAc, sayfaKapat, dosyaHazir, calis, seraCipleri, beklemeBandi },
+  };
 })();

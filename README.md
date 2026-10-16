@@ -15,6 +15,8 @@ iPhone'da çalışan, internetsiz de açılan sera iş takip uygulaması. Günl�
   - `<AY> AYI <SERA> RAPOR.xlsx`: her personel için ayrı sayfa (TARİH / YAPILAN İŞ / TAMAMLANAN / KALAN / UYARI, altta `SIRA SAYISI`). İsteğe bağlı ÖZET sayfası eklenebilir.
   - Ayın bütün günlük raporları tek dosyada (her gün bir sayfa).
   - Dosya iPhone paylaş menüsüyle WhatsApp'a, Mail'e veya Dosyalar'a gönderilir.
+- **Sera Defteri – Hasat:** tarih, sera, ürün/çeşit, sınıf, kasa, kg, alıcı, fiyat. Ortalama kg/kasa ve tutar otomatik hesaplanır; yalnız kasa girilirse geçmiş ortalamadan kg tahmini önerilir. Excel: tüm kayıtlar (toplam formülleriyle), günlük kg özeti (sera bazında), ürün/sınıf özeti.
+- **Sera Defteri – İlaçlama:** ilaç, etken madde, hedef zararlı/hastalık, uygulama şekli, doz, su, kullanılan miktar, uygulayan, bekleme süresi. Daha önce kullanılan ilaç seçilince bilgiler otomatik dolar. **Bekleme süresi dolmadan** Günlük ve Hasat ekranlarında kırmızı uyarı çıkar, hasat kaydında onay istenir. Excel: İlaçlama Kayıt Defteri (hasat için uygun tarih dahil).
 - **Excel'den içe aktarma:** Mevcut günlük ve aylık rapor dosyalarınızı seçtiğinizde seralar, personel, sıra sayıları ve geçmiş kayıtlar otomatik yüklenir.
 - **Aylık özet:** Çalışılan gün, devamsızlık, tamamlanan ve kalan sıra, iş türlerine göre dağılım.
 - **Çevrimdışı çalışır**, koyu modu destekler. Veriler yalnızca telefonda saklanır. JSON yedek alınabilir; 7 gün yedek alınmazsa uygulama hatırlatır.
@@ -42,6 +44,7 @@ css/app.css           tasarım (açık/koyu tema)
 js/store.js           veri modeli ve kayıt
 js/excel.js           Excel çıktıları ve içe aktarma
 js/app.js             ekranlar
+js/defter.js          hasat ve ilaçlama defteri
 sw.js                 çevrimdışı önbellek
 ```
 
@@ -49,8 +52,8 @@ Yerelde denemek için: `python3 -m http.server` komutunu çalıştırın, ardın
 
 ## Gelecek için fikirler
 
-- İlaçlama ve gübreleme kaydı (ürün, doz, bekleme süresi uyarısı)
-- Hasat miktarı (kg/kasa) takibi ve haftalık verim grafiği
+- Gübreleme programı ve stok takibi (ilaç/gübre deposu)
+- Haftalık verim grafiği, sera ve dekar başına verim karşılaştırması
 - Puantaj ve yevmiye/maaş hesabı (çalışılan günlerden)
 - Sera iklim notları (sıcaklık, nem, sulama)
 - Birden fazla kişi kullanacaksa bulut senkronizasyonu (ör. Supabase)

@@ -535,7 +535,168 @@
     return { wb, tur };
   }
 
+  // ---------- HASAT & İLAÇLAMA ----------
+  function donemKayitlari(liste, yil, ay, seraId) {
+    const on = `${yil}-${String(ay + 1).padStart(2, '0')}`;
+    return S.d[liste].filter((x) => x.tarih.startsWith(on) && (!seraId || !x.seraId || x.seraId === seraId));
+  }
+  function seraAdi(id) {
+    const s = id && S.sera(id);
+    return s ? s.ad : 'TÜM SERALAR';
+  }
+  function tabloBasligi(ws, baslik, basliklar, genislikler) {
+    genislikler.forEach((w, i) => (ws.getColumn(i + 1).width = w));
+    ws.mergeCells(1, 1, 1, basliklar.length);
+    const t = ws.getCell(1, 1);
+    t.value = baslik;
+    t.font = { bold: true, size: 14 };
+    t.alignment = { horizontal: 'center', vertical: 'middle' };
+    ws.getRow(1).height = 26;
+    basliklar.forEach((v, i) => {
+      const c = ws.getCell(2, i + 1);
+      c.value = v;
+      c.font = { bold: true, size: 10 };
+      c.fill = dolgu(GRI);
+      c.alignment = { wrapText: true, horizontal: 'center', vertical: 'middle' };
+      c.border = KENAR;
+    });
+    ws.getRow(2).height = 42;
+    ws.views = [{ state: 'frozen', ySplit: 2 }];
+  }
+  function tarihHucre(c, t) {
+    const [y, m, d] = t.split('-').map(Number);
+    c.value = new Date(Date.UTC(y, m - 1, d));
+    c.numFmt = 'dd.mm.yyyy';
+  }
+  function satirKenar(row, n) {
+    for (let i = 1; i <= n; i++) {
+      const c = row.getCell(i);
+      c.border = KENAR;
+      c.alignment = Object.assign({ vertical: 'middle', wrapText: true }, c.alignment || {});
+    }
+  }
+
+  async function hasatRaporu(yil, ay, seraId) {
+    const wb = new ExcelJS.Workbook();
+    wb.creator = 'Sera Otomasyon';
+    const kayitlar = donemKayitlari('hasatlar', yil, ay, seraId);
+    const donem = `${S.AYLAR[ay]} ${yil}`;
+
+    // 1) Tüm kayıtlar
+    const ws = wb.addWorksheet('HASAT KAYITLARI', {
+      pageSetup: { paperSize: 9, orientation: 'landscape', fitToPage: true, fitToWidth: 1, fitToHeight: 0 },
+    });
+    const bas = ['TARİH', 'SERA', 'ÜRÜN / ÇEŞİT', 'SINIF', 'KASA', 'KG', 'ORT. KG/KASA', 'ALICI / YER', 'FİYAT (₺/KG)', 'TUTAR (₺)', 'NOT'];
+    tabloBasligi(ws, `HASAT RAPORU – ${donem} – ${seraAdi(seraId)}`, bas, [12, 12, 20, 11, 9, 11, 11, 18, 11, 13, 28]);
+    let r = 3;
+    kayitlar.forEach((h) => {
+      const row = ws.getRow(r);
+      tarihHucre(row.getCell(1), h.tarih);
+      row.getCell(2).value = seraAdi(h.seraId);
+      row.getCell(3).value = h.urun || null;
+      row.getCell(4).value = h.sinif || null;
+      row.getCell(5).value = S.sayi(h.kasa);
+      row.getCell(6).value = S.sayi(h.kg);
+      const kasa = S.sayi(h.kasa), kg = S.sayi(h.kg), fiyat = S.sayi(h.fiyat);
+      row.getCell(7).value = { formula: `IF(E${r}>0,ROUND(F${r}/E${r},2),"")`, result: kasa && kg !== null ? Math.round((kg / kasa) * 100) / 100 : '' };
+      row.getCell(8).value = h.alici || null;
+      row.getCell(9).value = fiyat;
+      row.getCell(10).value = fiyat !== null ? { formula: `F${r}*I${r}`, result: (kg || 0) * fiyat } : null;
+      row.getCell(11).value = h.not || null;
+      row.getCell(9).numFmt = '#,##0.00';
+      row.getCell(10).numFmt = '#,##0.00';
+      [1, 4, 5, 6, 7].forEach((i) => (row.getCell(i).alignment = { horizontal: 'center' }));
+      satirKenar(row, bas.length);
+      r++;
+    });
+    const son = r - 1;
+    const top = ws.getRow(r);
+    top.getCell(1).value = 'TOPLAM';
+    ws.mergeCells(r, 1, r, 4);
+    const tk = kayitlar.reduce((t, h) => t + (S.sayi(h.kasa) || 0), 0);
+    const tg = kayitlar.reduce((t, h) => t + (S.sayi(h.kg) || 0), 0);
+    const tt = kayitlar.reduce((t, h) => t + (S.sayi(h.kg) || 0) * (S.sayi(h.fiyat) || 0), 0);
+    top.getCell(5).value = { formula: `SUM(E3:E${Math.max(3, son)})`, result: tk };
+    top.getCell(6).value = { formula: `SUM(F3:F${Math.max(3, son)})`, result: tg };
+    top.getCell(7).value = { formula: `IF(E${r}>0,ROUND(F${r}/E${r},2),"")`, result: tk ? Math.round((tg / tk) * 100) / 100 : '' };
+    top.getCell(10).value = { formula: `SUM(J3:J${Math.max(3, son)})`, result: tt };
+    top.getCell(10).numFmt = '#,##0.00';
+    for (let i = 1; i <= bas.length; i++) {
+      const c = top.getCell(i);
+      c.font = { bold: true };
+      c.fill = dolgu(MAVI);
+      c.border = KENAR;
+      if (i >= 5 && i <= 7) c.alignment = { horizontal: 'center' };
+    }
+
+    // 2) Günlük özet: gün x sera (kg)
+    const seralar = seraId ? [S.sera(seraId)].filter(Boolean) : S.d.seralar;
+    const wg = wb.addWorksheet('GÜNLÜK ÖZET (KG)');
+    const gb = ['TARİH'].concat(seralar.map((x) => x.ad + ' KG'), ['TOPLAM KG', 'TOPLAM KASA']);
+    tabloBasligi(wg, `GÜNLÜK HASAT ÖZETİ – ${donem}`, gb, [12].concat(seralar.map(() => 13), [13, 13]));
+    const gunler = Array.from(new Set(kayitlar.map((h) => h.tarih))).sort();
+    gunler.forEach((t, i) => {
+      const row = wg.getRow(3 + i);
+      tarihHucre(row.getCell(1), t);
+      const gk = kayitlar.filter((h) => h.tarih === t);
+      seralar.forEach((x, j) => (row.getCell(2 + j).value = Math.round(gk.filter((h) => h.seraId === x.id).reduce((a, h) => a + (S.sayi(h.kg) || 0), 0) * 100) / 100));
+      row.getCell(2 + seralar.length).value = Math.round(gk.reduce((a, h) => a + (S.sayi(h.kg) || 0), 0) * 100) / 100;
+      row.getCell(3 + seralar.length).value = gk.reduce((a, h) => a + (S.sayi(h.kasa) || 0), 0);
+      satirKenar(row, gb.length);
+      for (let c = 1; c <= gb.length; c++) row.getCell(c).alignment = { horizontal: 'center' };
+    });
+
+    // 3) Ürün / sınıf özeti
+    const wu = wb.addWorksheet('ÜRÜN ÖZETİ');
+    const ub = ['SERA', 'ÜRÜN / ÇEŞİT', 'SINIF', 'KASA', 'KG', 'TUTAR (₺)'];
+    tabloBasligi(wu, `ÜRÜN VE SINIF ÖZETİ – ${donem}`, ub, [14, 22, 12, 10, 12, 14]);
+    const grup = {};
+    kayitlar.forEach((h) => {
+      const k = [seraAdi(h.seraId), S.trUpper(h.urun || '-'), S.trUpper(h.sinif || '-')].join('|');
+      const g = (grup[k] = grup[k] || { kasa: 0, kg: 0, tutar: 0 });
+      g.kasa += S.sayi(h.kasa) || 0;
+      g.kg += S.sayi(h.kg) || 0;
+      g.tutar += (S.sayi(h.kg) || 0) * (S.sayi(h.fiyat) || 0);
+    });
+    Object.keys(grup).sort().forEach((k, i) => {
+      const row = wu.getRow(3 + i);
+      const [a, b, c] = k.split('|');
+      const g = grup[k];
+      [a, b, c, g.kasa, Math.round(g.kg * 100) / 100, g.tutar || null].forEach((v, j) => (row.getCell(j + 1).value = v));
+      row.getCell(6).numFmt = '#,##0.00';
+      satirKenar(row, ub.length);
+    });
+    return wb;
+  }
+
+  async function ilaclamaRaporu(yil, ay, seraId) {
+    const wb = new ExcelJS.Workbook();
+    wb.creator = 'Sera Otomasyon';
+    const ws = wb.addWorksheet('İLAÇLAMA KAYITLARI', {
+      pageSetup: { paperSize: 9, orientation: 'landscape', fitToPage: true, fitToWidth: 1, fitToHeight: 0 },
+    });
+    const bas = ['TARİH', 'SERA', 'İLAÇ (TİCARİ ADI)', 'ETKEN MADDE', 'HEDEF ZARARLI / HASTALIK', 'UYGULAMA ŞEKLİ', 'DOZ', 'SU MİKTARI (L)', 'KULLANILAN İLAÇ MİKTARI', 'UYGULAYAN', 'BEKLEME SÜRESİ (GÜN)', 'HASAT İÇİN UYGUN TARİH', 'NOT'];
+    tabloBasligi(ws, `İLAÇLAMA KAYIT DEFTERİ – ${S.AYLAR[ay]} ${yil} – ${seraAdi(seraId)}`, bas, [12, 13, 20, 20, 22, 14, 14, 10, 13, 18, 10, 13, 26]);
+    donemKayitlari('ilaclamalar', yil, ay, seraId).forEach((il, i) => {
+      const row = ws.getRow(3 + i);
+      tarihHucre(row.getCell(1), il.tarih);
+      const vals = [null, seraAdi(il.seraId), il.ilac, il.etken, il.hedef, il.uygulama, il.doz, S.sayi(il.su), il.miktar, il.uygulayan, S.sayi(il.bekleme)];
+      vals.forEach((v, j) => {
+        if (j) row.getCell(j + 1).value = v === '' || v === undefined ? null : v;
+      });
+      if (S.sayi(il.bekleme)) tarihHucre(row.getCell(12), S.uygunTarih(il));
+      row.getCell(13).value = il.not || null;
+      [1, 8, 11, 12].forEach((c) => (row.getCell(c).alignment = { horizontal: 'center' }));
+      satirKenar(row, bas.length);
+    });
+    return wb;
+  }
+
   window.Rapor = {
+    hasatRaporu,
+    ilaclamaRaporu,
+    donemKayitlari,
+    seraAdi,
     gunlukRapor,
     aylikRapor,
     blob,

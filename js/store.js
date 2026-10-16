@@ -37,6 +37,8 @@
       personel: [],
       isTurleri: VARSAYILAN_ISLER.slice(),
       gunler: {},
+      hasatlar: [],
+      ilaclamalar: [],
       ayarlar: { pazarTatil: true, sonYedek: null, kurulum: new Date().toISOString() },
     };
   }
@@ -65,6 +67,8 @@
     d.seralar = d.seralar || [];
     d.personel = d.personel || [];
     d.gunler = d.gunler || {};
+    d.hasatlar = Array.isArray(d.hasatlar) ? d.hasatlar : [];
+    d.ilaclamalar = Array.isArray(d.ilaclamalar) ? d.ilaclamalar : [];
     return d;
   }
 
@@ -225,6 +229,63 @@
     return Math.max(0, Math.round((top - kal) * 100) / 100);
   }
 
+  // ---- Hasat & İlaçlama ----
+  const HEDEFLER = [
+    'TUTA (DOMATES GÜVESİ)',
+    'BEYAZ SİNEK',
+    'YAPRAK BİTİ',
+    'THRİPS',
+    'KIRMIZI ÖRÜMCEK',
+    'YAPRAK GALERİ SİNEĞİ',
+    'KÜLLEME',
+    'MİLDİYÖ',
+    'KURŞUNİ KÜF (BOTRYTİS)',
+    'ERKEN YANIKLIK',
+    'KÖK BOĞAZI ÇÜRÜKLÜĞÜ',
+    'NEMATOD',
+    'YAPRAK GÜBRESİ',
+  ];
+  const UYGULAMALAR = ['PÜSKÜRTME', 'DAMLA SULAMA İLE', 'SİSLEME', 'TOZLAMA', 'TOPRAĞA'];
+  const SINIFLAR = ['1. SINIF', '2. SINIF', '3. SINIF', 'ISKARTA'];
+
+  function kayitKaydet(liste, obj) {
+    const arr = durum[liste];
+    if (!obj.id) {
+      obj.id = uid();
+      arr.push(obj);
+    } else {
+      const i = arr.findIndex((x) => x.id === obj.id);
+      if (i >= 0) arr[i] = obj;
+      else arr.push(obj);
+    }
+    arr.sort((a, b) => (a.tarih < b.tarih ? -1 : a.tarih > b.tarih ? 1 : 0));
+    kaydet();
+    return obj;
+  }
+  function kayitSil(liste, id) {
+    durum[liste] = durum[liste].filter((x) => x.id !== id);
+    kaydet();
+  }
+  // Hasat için uygun ilk gün = ilaçlama tarihi + bekleme süresi
+  function uygunTarih(il) {
+    const b = sayi(il.bekleme) || 0;
+    return gunEkle(il.tarih, b);
+  }
+  // t gününde bu serada bekleme süresi dolmamış ilaçlamalar
+  function beklemeUyarilari(seraId, t) {
+    return durum.ilaclamalar.filter(
+      (il) => (sayi(il.bekleme) || 0) > 0 && (!il.seraId || !seraId || il.seraId === seraId) && il.tarih <= t && uygunTarih(il) > t
+    );
+  }
+  // Önceki kayıtlardan ilaç kataloğu (ada göre son değerler)
+  function ilacKatalogu() {
+    const k = {};
+    durum.ilaclamalar.forEach((il) => {
+      if (il.ilac) k[trUpper(il.ilac)] = il;
+    });
+    return k;
+  }
+
   // ---- Yedekleme ----
   function disaAktarJSON() {
     durum.ayarlar.sonYedek = new Date().toISOString();
@@ -281,6 +342,14 @@
     tatilMi,
     pazarMi,
     yapilan,
+    HEDEFLER,
+    UYGULAMALAR,
+    SINIFLAR,
+    kayitKaydet,
+    kayitSil,
+    uygunTarih,
+    beklemeUyarilari,
+    ilacKatalogu,
     disaAktarJSON,
     iceAktarJSON,
     sifirla,
