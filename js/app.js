@@ -235,6 +235,10 @@
         <div class="kisi">
           <b>${esc(p.ad)}</b>
           <small>${esc(p.siraMetni || '')}${p.aktif ? '' : ' · pasif'}</small>
+          ${(() => {
+            const kar = S.kisiKarantina(p.id);
+            return kar.length ? `<small class="karantina-etiket">⚠ Karantina sırası: ${kar.join(', ')}</small>` : '';
+          })()}
         </div>
         <div class="seg" role="radiogroup" aria-label="Durum">
           ${Object.entries(S.DURUMLAR)
@@ -708,8 +712,8 @@
     $('#r-ilac').onclick = donemDosya('İlaçlama kayıtları', R.ilaclamaRaporu);
     $('#r-bitki').onclick = () =>
       calis('Bitki sayımı', async () => {
-        if (!S.d.bitkiSayimlari.length) throw new Error('Henüz bitki sayımı yok. Ayarlar › Excel’den içe aktar ile bitki sayısı dosyasını yükleyin.');
-        const son = S.d.bitkiSayimlari.map((x) => x.tarih).sort().pop();
+        if (!S.d.bitkiSayimlari.length && !Object.keys(S.d.yerlesim).length) throw new Error('Henüz kişi yerleşimi ya da bitki sayımı yok. Ayarlar › Excel’den içe aktar ile bitki sayısı dosyasını yükleyin.');
+        const son = S.d.bitkiSayimlari.map((x) => x.tarih).sort().pop() || S.tarihStr(new Date());
         dosyaHazir(await R.blob(await R.bitkiRaporu()), `SERA 1 VE 2 BİTKİ SAYISI ${S.trTarih(son)}.xlsx`);
       });
     $('#r-toplu').onclick = () => {
@@ -964,6 +968,7 @@
        <label class="alan-blok"><span>Toplam sıra sayısı</span><input id="k-top" inputmode="decimal" value="${esc(S.sayiYaz(p.toplamSira))}" placeholder="ör. 15"></label>
        <label class="onay"><input type="checkbox" id="k-aktif" ${p.aktif ? 'checked' : ''}> Aktif (günlük listede görünsün)</label>
        <button class="btn birincil genis" id="k-kaydet">Kaydet</button>
+       ${pid && window.Sema ? `<button class="btn genis" id="k-sira">${ikon('harita')} Seradaki sıralarını düzenle</button>` : ''}
        ${pid ? '<button class="btn tehlike genis" id="k-sil">Personeli sil</button>' : ''}`,
       (g) => {
         $('#k-metin', g).addEventListener('input', (e) => {
@@ -986,12 +991,16 @@
           sayfaKapat();
           personelCiz();
         };
+        const sira = $('#k-sira', g);
+        if (sira) sira.onclick = () => window.Sema.kisiDuzenleyici(pid);
         const sil = $('#k-sil', g);
         if (sil)
           sil.onclick = () => {
             if (!confirm(`${p.ad} silinsin mi? Geçmiş kayıtları raporlarda görünmez. (Sadece listeden kaldırmak için “Aktif” işaretini kaldırın.)`)) return;
             S.d.personel = S.d.personel.filter((x) => x.id !== pid);
             Object.values(S.d.gunler).forEach((gun) => delete gun.kayitlar[pid]);
+            delete S.d.yerlesim[pid];
+            S.d.bitkiSayimlari.forEach((sy) => sy.kisi && delete sy.kisi[pid]);
             S.kaydet();
             sayfaKapat();
             personelCiz();
@@ -1038,7 +1047,7 @@
       </section>
       <section class="panel">
         <button class="btn tehlike genis" id="sifirla">Tüm verileri sil</button>
-        <p class="ince orta">Sera Otomasyon · v1.3</p>
+        <p class="ince orta">Sera Otomasyon · v1.4</p>
       </section>`;
 
     $('#git-personel').onclick = () => {
