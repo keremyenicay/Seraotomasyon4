@@ -125,6 +125,8 @@
       hasat: '<path d="M12 22c-4.4 0-8-3.1-8-7.5S7.6 7 12 7s8 3.1 8 7.5S16.4 22 12 22z"/><path d="M12 7c0-2 1-4 3-5M9 4c1.2.4 2.3 1.4 3 3"/>',
       ilac: '<path d="M9 2h6M10 2v4l-5 9a4 4 0 0 0 3.5 6h7A4 4 0 0 0 19 15l-5-9V2"/><path d="M7 14h10"/>',
       uyari: '<path d="M10.3 3.9L1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><path d="M12 9v4M12 17h.01"/>',
+      harita: '<path d="M1 6v16l7-4 8 4 7-4V2l-7 4-8-4z"/><path d="M8 2v16M16 6v16"/>',
+      konum: '<circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/><circle cx="12" cy="12" r="7"/>',
       gunes: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>',
     }[ad];
     return `<svg class="ik" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${p || ''}</svg>`;
@@ -134,16 +136,16 @@
   const SEKMELER = [
     ['gunluk', 'Günlük'],
     ['defter', 'Defter'],
+    ['harita', 'Harita'],
     ['rapor', 'Raporlar'],
     ['ozet', 'Özet'],
-    ['personel', 'Personel'],
     ['ayarlar', 'Ayarlar'],
   ];
   function sekmeCiz() {
     const yedekGerekli = yedekHatirlat();
     $('#sekmeler').innerHTML = SEKMELER.map(
       ([k, ad]) =>
-        `<button data-sekme="${k}" class="${ui.sekme === k ? 'aktif' : ''}" aria-label="${ad}">${ikon(k)}<span>${ad}</span>${k === 'ayarlar' && yedekGerekli ? '<i class="nokta"></i>' : ''}</button>`
+        `<button data-sekme="${k}" class="${ui.sekme === k || (k === 'ayarlar' && ui.sekme === 'personel') ? 'aktif' : ''}" aria-label="${ad}">${ikon(k)}<span>${ad}</span>${k === 'ayarlar' && yedekGerekli ? '<i class="nokta"></i>' : ''}</button>`
     ).join('');
   }
   $('#sekmeler').addEventListener('click', (e) => {
@@ -165,7 +167,14 @@
     sekmeCiz();
     if (!ui.seraId || !S.sera(ui.seraId)) ui.seraId = S.d.seralar[0] ? S.d.seralar[0].id : null;
     const ekran = $('#ekran');
+    // Önceki ekranın temizliği (ör. haritada konum izlemeyi durdur)
+    if (ekran._ayril && ekran.dataset.sekme !== ui.sekme) {
+      const f = ekran._ayril;
+      ekran._ayril = null;
+      f();
+    }
     ekran.dataset.sekme = ui.sekme;
+    document.body.dataset.sekme = ui.sekme;
     (ekranlar[ui.sekme] || gunlukCiz)();
   }
 
@@ -655,9 +664,9 @@
         <button class="btn birincil genis" id="r-aylik">${ikon('excel')} Aylık Excel oluştur</button>
       </section>
       <section class="panel">
-        <h2>${ikon('hasat')} Hasat Raporu</h2>
-        <p class="ince">Seçilen ay ve sera için tüm hasat kayıtları (kasa, kg, ortalama, tutar), günlük kg özeti ve ürün/sınıf özeti.</p>
-        <button class="btn birincil genis" id="r-hasat">${ikon('excel')} Hasat Excel oluştur</button>
+        <h2>${ikon('hasat')} Hasat Tahmini</h2>
+        <p class="ince">Seçilen ay ve seradaki tahminler: örnek sayımlar, toplam meyve, alt 6 + üst 3/4/5 dizilimine göre kutu sayıları ve ortalama kutu (formüllü).</p>
+        <button class="btn birincil genis" id="r-hasat">${ikon('excel')} Hasat tahmini Excel oluştur</button>
       </section>
       <section class="panel">
         <h2>${ikon('ilac')} İlaçlama Kayıt Defteri</h2>
@@ -690,7 +699,7 @@
         dosyaHazir(await R.blob(wb), `${S.AYLAR[m - 1]} ${y} ${R.seraAdi(sid)} ${tur.toLocaleUpperCase('tr-TR')}.xlsx`);
       });
     };
-    $('#r-hasat').onclick = donemDosya('Hasat raporu', R.hasatRaporu);
+    $('#r-hasat').onclick = donemDosya('Hasat tahmini', R.hasatTahminRaporu);
     $('#r-ilac').onclick = donemDosya('İlaçlama kayıtları', R.ilaclamaRaporu);
     $('#r-toplu').onclick = () => {
       const [y, m] = ($('#r-ay').value || ui.ay).split('-').map(Number);
@@ -803,25 +812,20 @@
   }
 
   function hasatOzetPaneli(y, ay, seraId) {
-    const h = R.donemKayitlari('hasatlar', y, ay, seraId);
+    const t = R.donemKayitlari('tahminler', y, ay, seraId);
     const il = R.donemKayitlari('ilaclamalar', y, ay, seraId);
-    if (!h.length && !il.length) return '';
-    const kg = h.reduce((t, x) => t + (S.sayi(x.kg) || 0), 0);
-    const kasa = h.reduce((t, x) => t + (S.sayi(x.kasa) || 0), 0);
-    const urun = {};
-    h.forEach((x) => {
-      const k = S.trUpper(x.urun || '-');
-      urun[k] = (urun[k] || 0) + (S.sayi(x.kg) || 0);
-    });
+    if (!t.length && !il.length) return '';
+    const hes = t.map((x) => S.tahminHesapla(x));
+    const kutu = hes.reduce((a, h) => a + (h.ortKutu || 0), 0);
+    const meyve = hes.reduce((a, h) => a + (h.toplam || 0), 0);
+    const son = t[t.length - 1];
     return `<section class="panel">
-      <h2>${ikon('hasat')} Hasat ve ilaçlama</h2>
+      <h2>${ikon('hasat')} Hasat tahmini ve ilaçlama</h2>
       <ul class="liste">
-        <li><span>Toplam hasat</span><b>${S.sayiYaz(Math.round(kg * 10) / 10)} kg · ${S.sayiYaz(kasa)} kasa</b></li>
-        <li><span>Hasat yapılan gün</span><b>${new Set(h.map((x) => x.tarih)).size}</b></li>
-        ${Object.entries(urun)
-          .sort((a, b) => b[1] - a[1])
-          .map(([k, v]) => `<li><span>${esc(k)}</span><b>${S.sayiYaz(Math.round(v * 10) / 10)} kg</b></li>`)
-          .join('')}
+        <li><span>Tahmin sayısı</span><b>${t.length}</b></li>
+        <li><span>Toplam tahmini meyve</span><b>${meyve.toLocaleString('tr-TR')}</b></li>
+        <li><span>Toplam ortalama kutu</span><b>≈ ${kutu.toLocaleString('tr-TR')}</b></li>
+        ${son ? `<li><span>Son tahmin (${S.trTarih(son.tarih)} · ${esc(R.seraAdi(son.seraId))})</span><b>≈ ${(S.tahminHesapla(son).ortKutu || 0).toLocaleString('tr-TR')} kutu</b></li>` : ''}
         <li><span>İlaçlama sayısı</span><b>${il.length}</b></li>
       </ul>
     </section>`;
@@ -833,6 +837,7 @@
   function personelCiz() {
     const ekran = $('#ekran');
     ekran.innerHTML = `
+      <button class="geri" data-p="geri">${ikon('sol')} Ayarlar</button>
       <h1 class="baslik">Personel & Seralar</h1>
       ${S.d.seralar
         .map((s) => {
@@ -866,6 +871,10 @@
     const li = b.closest('[data-pid]');
     const pid = li && li.dataset.pid;
     switch (b.dataset.p) {
+      case 'geri':
+        ui.sekme = 'ayarlar';
+        uiKaydet();
+        return ciz();
       case 'sera-ekle': {
         const ad = prompt('Sera adı (ör. SERA 3):', 'SERA ' + (S.d.seralar.length + 1));
         if (ad && ad.trim()) {
@@ -980,6 +989,7 @@
     const kayitGun = Object.keys(S.d.gunler).length;
     $('#ekran').innerHTML = `
       <h1 class="baslik">Ayarlar</h1>
+      <button class="panel menu-satir" id="git-personel">${ikon('personel')}<span><b>Personel & Seralar</b><small>${S.d.seralar.length} sera · ${S.d.personel.filter((p) => p.aktif).length} aktif personel</small></span>${ikon('sag')}</button>
       ${yedekHatirlat() ? `<div class="uyari-bant">Son yedeğin üzerinden 7 günden fazla geçti. Verileriniz sadece bu telefonda; lütfen yedek alın.</div>` : ''}
       <section class="panel">
         <h2>${ikon('yukle')} Excel'den içe aktar</h2>
@@ -1009,9 +1019,15 @@
       </section>
       <section class="panel">
         <button class="btn tehlike genis" id="sifirla">Tüm verileri sil</button>
-        <p class="ince orta">Sera Otomasyon · v1.1</p>
+        <p class="ince orta">Sera Otomasyon · v1.2</p>
       </section>`;
 
+    $('#git-personel').onclick = () => {
+      ui.sekme = 'personel';
+      uiKaydet();
+      ciz();
+      window.scrollTo(0, 0);
+    };
     $('#y-al').onclick = () => {
       const blob = new Blob([S.disaAktarJSON()], { type: 'application/json' });
       dosyaHazir(blob, `sera-yedek-${S.tarihStr(new Date())}.json`);
