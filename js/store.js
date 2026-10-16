@@ -40,6 +40,9 @@
       hasatlar: [],
       tahminler: [],
       ilaclamalar: [],
+      sektorler: [],
+      yerlesim: {},
+      bitkiSayimlari: [],
       ayarlar: { pazarTatil: true, sonYedek: null, kurulum: new Date().toISOString() },
     };
   }
@@ -71,6 +74,9 @@
     d.hasatlar = Array.isArray(d.hasatlar) ? d.hasatlar : [];
     d.ilaclamalar = Array.isArray(d.ilaclamalar) ? d.ilaclamalar : [];
     d.tahminler = Array.isArray(d.tahminler) ? d.tahminler : [];
+    d.sektorler = Array.isArray(d.sektorler) ? d.sektorler : [];
+    d.yerlesim = d.yerlesim && typeof d.yerlesim === 'object' ? d.yerlesim : {};
+    d.bitkiSayimlari = Array.isArray(d.bitkiSayimlari) ? d.bitkiSayimlari : [];
     return d;
   }
 
@@ -285,7 +291,7 @@
     const sayimlar = (t.sayimlar || []).map(sayi).filter((n) => n !== null && n >= 0);
     const ort = sayimlar.length ? sayimlar.reduce((a, b) => a + b, 0) / sayimlar.length : null;
     const sira = sayi(t.siraSayisi) || 0;
-    const carpan = t.birim === 'sira' ? sira : sira * (sayi(t.bitkiSira) || 0);
+    const carpan = t.birim === 'sira' ? sira : sayi(t.toplamBitki) || sira * (sayi(t.bitkiSira) || 0);
     const fire = Math.min(100, Math.max(0, sayi(t.fire) || 0));
     const toplam = ort !== null && carpan ? Math.round(ort * carpan * (1 - fire / 100)) : null;
     const alt = sayi(t.altKat) || 6;
@@ -298,6 +304,148 @@
   // Serada personelin toplam sıra sayısı (tahmin için öneri)
   function seraSiraToplami(seraId) {
     return durum.personel.filter((p) => p.seraId === seraId && p.aktif).reduce((t, p) => t + (sayi(p.toplamSira) || 0), 0) || null;
+  }
+
+  // ---- Sera içi sektörler, kişi yerleşimi (gutter) ve bitki sayımları ----
+  // Şema: giriş altta. Sera 1: sağ alt Sektör 1 (A), sol alt 2 (B), sağ orta 3 (C), sol orta 4 (D).
+  // Sera 2: sağ 5*6 (A+B), sol 7 (C), üst sıra soldan sağa 11 (G), 10 (F), 9 (E), 8 (D).
+  // yon: 1. gutter'ın kutunun hangi kenarında olduğu ('sol' = sol kenar). Orta yol tarafı varsayılan.
+  const SEKTOR_SABLONU = [
+    { no: '1', sera: 'SERA 1', harfler: ['A'], kutu: { x: 361, y: 535, w: 336, h: 190 }, yon: 'sol' },
+    { no: '2', sera: 'SERA 1', harfler: ['B'], kutu: { x: 2, y: 533, w: 303, h: 192 }, yon: 'sag' },
+    { no: '3', sera: 'SERA 1', harfler: ['C'], kutu: { x: 352, y: 324, w: 345, h: 144 }, yon: 'sol' },
+    { no: '4', sera: 'SERA 1', harfler: ['D'], kutu: { x: 2, y: 322, w: 302, h: 148 }, yon: 'sag' },
+    { no: '5 * 6', sera: 'SERA 2', harfler: ['A', 'B'], kutu: { x: 351, y: 179, w: 344, h: 141 }, yon: 'sol' },
+    { no: '7', sera: 'SERA 2', harfler: ['C'], kutu: { x: 2, y: 176, w: 303, h: 144 }, yon: 'sag' },
+    { no: '8', sera: 'SERA 2', harfler: ['D'], kutu: { x: 533, y: 3, w: 164, h: 117 }, yon: 'sol' },
+    { no: '9', sera: 'SERA 2', harfler: ['E'], kutu: { x: 393, y: 3, w: 138, h: 117 }, yon: 'sol' },
+    { no: '10', sera: 'SERA 2', harfler: ['F'], kutu: { x: 235, y: 5, w: 155, h: 112 }, yon: 'sag' },
+    { no: '11', sera: 'SERA 2', harfler: ['G'], kutu: { x: 2, y: 2, w: 231, h: 118 }, yon: 'sag' },
+  ];
+  // Excel başlığındaki sektör numarası → sera adı + tünel harfi (harfsiz satırlar için, ör. CHERRY)
+  const SEKTOR_HARF = { 1: ['SERA 1', 'A'], 2: ['SERA 1', 'B'], 3: ['SERA 1', 'C'], 4: ['SERA 1', 'D'], 5: ['SERA 2', 'A'], 6: ['SERA 2', 'B'], 7: ['SERA 2', 'C'], 8: ['SERA 2', 'D'], 9: ['SERA 2', 'E'], 10: ['SERA 2', 'F'], 11: ['SERA 2', 'G'] };
+
+  function sektorleriHazirla() {
+    let degisti = false;
+    SEKTOR_SABLONU.forEach((sb) => {
+      const sera = seraBulAd(sb.sera);
+      if (!sera) return;
+      if (durum.sektorler.some((x) => x.seraId === sera.id && x.no === sb.no)) return;
+      durum.sektorler.push({ id: uid(), no: sb.no, seraId: sera.id, harfler: sb.harfler.slice(), kutu: Object.assign({}, sb.kutu), yon: sb.yon });
+      degisti = true;
+    });
+    if (degisti) kaydet();
+    return durum.sektorler;
+  }
+  function sektorBul(seraId, harf) {
+    return durum.sektorler.find((x) => x.seraId === seraId && x.harfler.includes(harf));
+  }
+  // Bir harfteki gutter sayısı = yerleşimdeki en büyük numara (yoksa 60)
+  function gutterSayisi(seraId, harf) {
+    let max = 0;
+    Object.values(durum.yerlesim).forEach((l) => l.forEach((g) => g.seraId === seraId && g.harf === harf && g.gutter > max && (max = g.gutter)));
+    durum.bitkiSayimlari.forEach((sy) => {
+      if (sy.seraId !== seraId) return;
+      Object.keys(sy.sayilar).forEach((k) => {
+        if (k[0] === harf) max = Math.max(max, parseInt(k.slice(1), 10) || 0);
+      });
+    });
+    return max || 60;
+  }
+  function kisiGutterlari(pid) {
+    return durum.yerlesim[pid] || [];
+  }
+  function gutterSahipleri(seraId, harf, no) {
+    const l = [];
+    Object.entries(durum.yerlesim).forEach(([pid, gs]) => {
+      if (gs.some((g) => g.seraId === seraId && g.harf === harf && g.gutter === no)) {
+        const p = kisi(pid);
+        if (p) l.push(p);
+      }
+    });
+    return l;
+  }
+  function sayimlar(seraId) {
+    return durum.bitkiSayimlari.filter((x) => x.seraId === seraId).sort((a, b) => (a.tarih < b.tarih ? -1 : 1));
+  }
+  function sonSayim(seraId) {
+    const l = sayimlar(seraId);
+    return l[l.length - 1] || null;
+  }
+  function oncekiSayim(seraId) {
+    const l = sayimlar(seraId);
+    return l.length > 1 ? l[l.length - 2] : null;
+  }
+  // Gutter toplamı (paylaşılan / yarım sıralarda kişilerin toplamı)
+  function gutterBitki(sayim, harf, no) {
+    if (!sayim) return null;
+    const v = sayim.sayilar[harf + no];
+    return v === undefined ? null : v;
+  }
+  // Kişinin o gutter'daki bitkisi (yarım sıra paylaşımında kendi payı)
+  function kisiGutterBitki(sayim, pid, harf, no) {
+    if (!sayim) return null;
+    const k = sayim.kisi && sayim.kisi[pid];
+    if (k && k[harf + no] !== undefined) return k[harf + no];
+    return gutterBitki(sayim, harf, no);
+  }
+  // Gutter toplamını kişi paylarından yeniden hesapla
+  function gutterToplamGuncelle(sayim, seraId, harf, no) {
+    const sahipler = gutterSahipleri(seraId, harf, no);
+    const paylar = sahipler.map((p) => sayim.kisi && sayim.kisi[p.id] && sayim.kisi[p.id][harf + no]).filter((v) => v !== undefined && v !== null);
+    if (paylar.length) sayim.sayilar[harf + no] = paylar.reduce((a, b) => a + b, 0);
+  }
+  // Kişinin son ve önceki sayımdaki bitki toplamı
+  function kisiBitki(pid) {
+    let son = 0,
+      onceki = 0,
+      varOnceki = false,
+      varSon = false;
+    const gorulen = new Set();
+    kisiGutterlari(pid).forEach((g) => {
+      const k = g.seraId + g.harf + g.gutter;
+      if (gorulen.has(k)) return;
+      gorulen.add(k);
+      const a = kisiGutterBitki(sonSayim(g.seraId), pid, g.harf, g.gutter);
+      const b = kisiGutterBitki(oncekiSayim(g.seraId), pid, g.harf, g.gutter);
+      if (a !== null) {
+        son += a;
+        varSon = true;
+      }
+      if (b !== null) {
+        onceki += b;
+        varOnceki = true;
+      }
+    });
+    return { son: varSon ? son : null, onceki: varOnceki ? onceki : null, fark: varSon && varOnceki ? son - onceki : null };
+  }
+  function seraBitkiToplami(seraId, harfler) {
+    const sy = sonSayim(seraId);
+    if (!sy) return null;
+    return Object.entries(sy.sayilar).reduce((t, [k, v]) => (!harfler || harfler.includes(k[0]) ? t + (v || 0) : t), 0);
+  }
+  // Kişinin gutter'larını ardışık parçalara ayır: [{seraId, harf, bas, bit, adet}] (dönüş yönü korunur)
+  function kisiParcalari(pid) {
+    const out = [];
+    kisiGutterlari(pid).forEach((g) => {
+      const son = out[out.length - 1];
+      if (son && son.seraId === g.seraId && son.harf === g.harf && Math.abs(g.gutter - son.bit) === 1 && (son.adet === 1 || Math.sign(g.gutter - son.bit) === son.yon)) {
+        son.yon = Math.sign(g.gutter - son.bit);
+        son.bit = g.gutter;
+        son.adet++;
+      } else out.push({ seraId: g.seraId, harf: g.harf, bas: g.gutter, bit: g.gutter, adet: 1, yon: 0 });
+    });
+    return out;
+  }
+  function sektorAdi(seraId, harf) {
+    const sk = sektorBul(seraId, harf);
+    if (!sk) return harf;
+    return 'Sektör ' + (sk.harfler.length > 1 ? SEKTOR_HARF_NO(seraId, harf) || sk.no : sk.no);
+  }
+  function SEKTOR_HARF_NO(seraId, harf) {
+    const sera = durum.seralar.find((x) => x.id === seraId);
+    const e = Object.entries(SEKTOR_HARF).find(([, v]) => sera && isimAnahtar(v[0]) === isimAnahtar(sera.ad) && v[1] === harf);
+    return e ? e[0] : null;
   }
 
   // Önceki kayıtlardan ilaç kataloğu (ada göre son değerler)
@@ -375,6 +523,22 @@
     ilacKatalogu,
     UST_KATLAR,
     tahminHesapla,
+    SEKTOR_HARF,
+    sektorleriHazirla,
+    sektorBul,
+    gutterSayisi,
+    kisiGutterlari,
+    gutterSahipleri,
+    sayimlar,
+    sonSayim,
+    oncekiSayim,
+    gutterBitki,
+    kisiGutterBitki,
+    gutterToplamGuncelle,
+    kisiBitki,
+    seraBitkiToplami,
+    kisiParcalari,
+    sektorAdi,
     seraSiraToplami,
     disaAktarJSON,
     iceAktarJSON,

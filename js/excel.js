@@ -530,7 +530,10 @@
     const ilk = wb.worksheets[0];
     const a1 = String(hv(ilk.getCell('A1')) || '');
     let tur = 'bilinmiyor';
-    if (/^PERSONELLER/i.test(a1)) tur = 'gunluk';
+    let tunelVar = false;
+    for (let r = 1; r <= 12; r++) if (S.trUpper(String(hv(ilk.getCell(r, 1)) || '')).trim() === 'TÜNEL NO') tunelVar = true;
+    if (tunelVar) tur = 'bitki';
+    else if (/^PERSONELLER/i.test(a1)) tur = 'gunluk';
     else if (/^PERSONEL\s*:/i.test(a1)) tur = 'aylik';
     return { wb, tur };
   }
@@ -599,14 +602,18 @@
       const row = ws.getRow(r);
       tarihHucre(row.getCell(1), t.tarih);
       row.getCell(2).value = seraAdi(t.seraId);
-      row.getCell(3).value = t.birim === 'sira' ? 'SIRA' : 'BİTKİ';
+      row.getCell(3).value = t.birim === 'sira' ? 'SIRA' : t.toplamBitki ? `BİTKİ (sayım: ${Number(t.toplamBitki).toLocaleString('tr-TR')})` : 'BİTKİ';
       row.getCell(4).value = (t.sayimlar || []).map((n) => S.sayiYaz(n)).join(' - ');
       row.getCell(5).value = h.ort;
-      row.getCell(6).value = S.sayi(t.siraSayisi);
-      row.getCell(7).value = t.birim === 'sira' ? null : S.sayi(t.bitkiSira);
+      row.getCell(6).value = t.toplamBitki ? null : S.sayi(t.siraSayisi);
+      row.getCell(7).value = t.birim === 'sira' || t.toplamBitki ? null : S.sayi(t.bitkiSira);
       row.getCell(8).value = S.sayi(t.fire) || 0;
       row.getCell(9).value = {
-        formula: t.birim === 'sira' ? `ROUND(E${r}*F${r}*(1-H${r}/100),0)` : `ROUND(E${r}*F${r}*G${r}*(1-H${r}/100),0)`,
+        formula: t.toplamBitki
+          ? `ROUND(E${r}*${Number(t.toplamBitki)}*(1-H${r}/100),0)`
+          : t.birim === 'sira'
+          ? `ROUND(E${r}*F${r}*(1-H${r}/100),0)`
+          : `ROUND(E${r}*F${r}*G${r}*(1-H${r}/100),0)`,
         result: h.toplam,
       };
       const secili = [];
@@ -673,7 +680,217 @@
     return wb;
   }
 
+  // ---------- BİTKİ SAYIMI (kişi yerleşimi: tünel / gutter) ----------
+  function kisiBaslik(metin, sera) {
+    // "ELİFE EMREN-1-3.SEKTÖR", "FATMA YILDIZ-1-10.SEKTÖR" (ad: FATMA YILDIZ - 1 -), "SANİYE TANRIKULU -4.SEKTÖR"
+    const u = S.trUpper(metin).trim();
+    const m = u.match(/^(.*?)[\s\-–]+([\d\s\-–,]+?)\.?\s*SEKT[ÖO]R/);
+    if (!m) return { ad: u, sektorler: [], kisi: seraPersonelBul(u, sera.id) };
+    const temel = m[1].replace(/[\s\-–.]+$/, '');
+    const nolar = (m[2].match(/\d+/g) || []).map(Number);
+    let p = seraPersonelBul(temel, sera.id);
+    let ad = temel;
+    let i = 0;
+    // Ad sonundaki numara (FATMA YILDIZ - 1 -) sektör sanılmasın
+    while (!p && i < nolar.length - 1) {
+      i++;
+      const aday = temel + ' - ' + nolar.slice(0, i).join(' - ') + ' -';
+      const bul = seraPersonelBul(aday, sera.id);
+      if (bul) {
+        p = bul;
+        ad = aday;
+        nolar.splice(0, i);
+        break;
+      }
+    }
+    return { ad, sektorler: nolar, kisi: p };
+  }
+
+  function bitkiIceAktar(ws, bugunTarih) {
+    let sera = null;
+    let kisi = null;
+    let sektorNolar = [];
+    let tarih = null;
+    const ist = { kisi: 0, yeniKisi: 0, gutter: 0, bitki: 0, tarih: null, cakisma: [], kayip: [] };
+    const yeniYer = {};
+    const sayim = {};
+    // Birleştirilmiş başlık hücrelerinde ExcelJS ana hücrenin değerini tekrarlar; onları boş say
+    const hvTek = (c) => (c.isMerged && c.master && c.master.address !== c.address ? null : hv(c));
+    ws.eachRow((row) => {
+      const a = hvTek(row.getCell(1));
+      const b = hvTek(row.getCell(2));
+      const c = hvTek(row.getCell(3));
+      const aU = S.trUpper(String(a === null ? '' : a)).trim();
+      if (/^SERA\s*\d+$/.test(aU) && b === null) {
+        sera = S.seraBulAd(aU) || S.seraEkle(aU);
+        kisi = null;
+        return;
+      }
+      if (aU === 'TÜNEL NO') {
+        const m = String(c || '').match(/(\d{1,2})[.\/](\d{1,2})[.\/](\d{2,4})/);
+        if (m) tarih = `${m[3].length === 2 ? '20' + m[3] : m[3]}-${m[2].padStart(2, '0')}-${m[1].padStart(2, '0')}`;
+        return;
+      }
+      if (!sera || !aU || aU.startsWith('TOPLAM') || aU.startsWith('BİTKİ KAYB')) return;
+      if (b === null && c === null) {
+        const k = kisiBaslik(aU, sera);
+        kisi = k.kisi;
+        if (!kisi) {
+          kisi = S.personelEkle({ ad: k.ad, seraId: sera.id, siraMetni: '', toplamSira: null });
+          ist.yeniKisi++;
+        }
+        sektorNolar = k.sektorler;
+        yeniYer[kisi.id] = [];
+        ist.kisi++;
+        return;
+      }
+      if (!kisi) return;
+      const gutter = S.sayi(b);
+      if (gutter === null) return;
+      const tunel = String(a).trim();
+      const mm = S.trUpper(tunel).match(/^(\d+)\s*-\s*([A-Z])(?![A-Z])\s*(.*)$/);
+      let harf, seraId, etiket;
+      if (mm) {
+        harf = mm[2];
+        seraId = sera.id;
+        etiket = mm[3].trim();
+      } else {
+        // Harfsiz satır (ör. CHERRY): başlıktaki sektörden bul
+        const no = sektorNolar.find((n) => S.SEKTOR_HARF[n]);
+        const e = no ? S.SEKTOR_HARF[no] : null;
+        const s2 = e && (S.seraBulAd(e[0]) || S.seraEkle(e[0]));
+        harf = e ? e[1] : '?';
+        seraId = s2 ? s2.id : sera.id;
+        etiket = S.trUpper(tunel);
+      }
+      yeniYer[kisi.id].push({ seraId, harf, gutter, tunel, etiket });
+      ist.gutter++;
+      const bitki = typeof c === 'number' ? c : S.sayi(c);
+      if (bitki !== null) {
+        const sy = (sayim[seraId] = sayim[seraId] || { sayilar: {}, kisi: {} });
+        const key = harf + gutter;
+        sy.sayilar[key] = (sy.sayilar[key] || 0) + bitki; // yarım sıralarda iki kişinin payı toplanır
+        const km = (sy.kisi[kisi.id] = sy.kisi[kisi.id] || {});
+        km[key] = (km[key] || 0) + bitki; // aynı kişi aynı gutter'ı iki kez yazdıysa toplanır
+        ist.bitki += bitki;
+      }
+    });
+    tarih = tarih || bugunTarih;
+    ist.tarih = tarih;
+    // Önceki toplamlar (kayıp hesabı için)
+    const onceKisi = {};
+    Object.keys(yeniYer).forEach((pid) => (onceKisi[pid] = S.kisiBitki(pid).son));
+    Object.entries(yeniYer).forEach(([pid, l]) => {
+      S.d.yerlesim[pid] = l;
+      const p = S.kisi(pid);
+      if (p && (p.toplamSira === null || p.toplamSira === undefined)) p.toplamSira = l.length;
+    });
+    Object.entries(sayim).forEach(([seraId, sy]) => {
+      const varolan = S.d.bitkiSayimlari.find((x) => x.seraId === seraId && x.tarih === tarih);
+      if (varolan) {
+        Object.assign(varolan.sayilar, sy.sayilar);
+        varolan.kisi = Object.assign(varolan.kisi || {}, sy.kisi);
+      } else S.d.bitkiSayimlari.push({ id: S.uid(), tarih, seraId, sayilar: sy.sayilar, kisi: sy.kisi });
+    });
+    S.sektorleriHazirla();
+    // Kayıp: içe aktarmadan önceki son sayıma göre
+    Object.keys(yeniYer).forEach((pid) => {
+      const once = onceKisi[pid];
+      const simdi = S.kisiBitki(pid).son;
+      if (once !== null && simdi !== null && once !== simdi) ist.kayip.push({ p: S.kisi(pid), fark: simdi - once });
+    });
+    ist.kayip.sort((x, y) => x.fark - y.fark);
+    // Aynı gutter'ı birden fazla kişi kullanıyor mu?
+    const sahip = {};
+    Object.entries(S.d.yerlesim).forEach(([pid, l]) =>
+      l.forEach((g) => {
+        const k = g.seraId + '|' + g.harf + g.gutter;
+        (sahip[k] = sahip[k] || new Set()).add(pid);
+      })
+    );
+    Object.entries(sahip).forEach(([k, set]) => {
+      if (set.size > 1) {
+        const [sid, g] = k.split('|');
+        ist.cakisma.push(`${(S.sera(sid) || {}).ad} ${g}: ${Array.from(set).map((id) => (S.kisi(id) || {}).ad.split(' ')[0]).join(' + ')}`);
+      }
+    });
+    return ist;
+  }
+
+  async function bitkiRaporu() {
+    const wb = new ExcelJS.Workbook();
+    wb.creator = 'Sera Otomasyon';
+    const ws = wb.addWorksheet('BİTKİ SAYISI', { pageSetup: { paperSize: 9, orientation: 'portrait', fitToPage: true, fitToWidth: 1, fitToHeight: 0 } });
+    const tarihler = Array.from(new Set(S.d.bitkiSayimlari.map((x) => x.tarih))).sort().slice(-4);
+    const tk = (t) => t.slice(8, 10) + '.' + t.slice(5, 7) + '.' + t.slice(2, 4);
+    const nSut = 2 + tarihler.length + (tarihler.length > 1 ? 1 : 0);
+    [26, 12].concat(tarihler.map(() => 18), tarihler.length > 1 ? [12] : []).forEach((w, i) => (ws.getColumn(i + 1).width = w));
+    const L = (n) => ws.getColumn(n).letter;
+    let r = 1;
+    const kisiToplamSatirlari = [];
+    const yaz = (row, vals, stil) =>
+      vals.forEach((v, i) => {
+        const c = row.getCell(i + 1);
+        c.value = v;
+        c.border = KENAR;
+        c.alignment = { horizontal: i ? 'center' : 'left', vertical: 'middle' };
+        if (stil) Object.assign(c, stil);
+      });
+    S.d.seralar.forEach((sera) => {
+      const kisiler = Object.keys(S.d.yerlesim)
+        .map((pid) => S.kisi(pid))
+        .filter((p) => p && p.seraId === sera.id && S.d.yerlesim[p.id].length);
+      if (!kisiler.length) return;
+      ws.mergeCells(r, 1, r, nSut);
+      const sb = ws.getCell(r, 1);
+      sb.value = sera.ad;
+      sb.font = { bold: true, size: 14 };
+      sb.alignment = { horizontal: 'center' };
+      r += 2;
+      kisiler.forEach((p) => {
+        const l = S.d.yerlesim[p.id];
+        const nolar = Array.from(new Set(l.map((g) => S.sektorAdi(g.seraId, g.harf).replace('Sektör ', ''))));
+        ws.mergeCells(r, 1, r, nSut);
+        const kb = ws.getCell(r, 1);
+        kb.value = `${p.ad}-${nolar.join('-')}.SEKTÖR`;
+        kb.font = { bold: true, size: 12 };
+        kb.fill = dolgu(GRI);
+        kb.border = KENAR;
+        r++;
+        yaz(ws.getRow(r), ['TÜNEL NO', 'GUTTER NO'].concat(tarihler.map((t) => tk(t) + ' BİTKİ SAYISI'), tarihler.length > 1 ? ['FARK'] : []), { font: { bold: true } });
+        r++;
+        const ilk = r;
+        l.forEach((g) => {
+          const vals = [g.tunel, g.gutter].concat(
+            tarihler.map((t) => {
+              const sy = S.d.bitkiSayimlari.find((x) => x.seraId === g.seraId && x.tarih === t);
+              return S.kisiGutterBitki(sy, p.id, g.harf, g.gutter);
+            })
+          );
+          if (tarihler.length > 1) vals.push({ formula: `${L(nSut - 1)}${r}-${L(nSut - 2)}${r}` });
+          yaz(ws.getRow(r), vals);
+          r++;
+        });
+        const son = r - 1;
+        const tv = ['TOPLAM SIRA-BİTKİ SAYISI', l.length].concat(tarihler.map((_, j) => ({ formula: `SUM(${L(3 + j)}${ilk}:${L(3 + j)}${son})` })));
+        if (tarihler.length > 1) tv.push({ formula: `SUM(${L(nSut)}${ilk}:${L(nSut)}${son})` });
+        yaz(ws.getRow(r), tv, { font: { bold: true }, fill: dolgu(MAVI) });
+        kisiToplamSatirlari.push(r);
+        r += 2;
+      });
+    });
+    const genel = ws.getRow(r);
+    yaz(genel, ['TOPLAM BİTKİ SAYISI', ''].concat(tarihler.map((_, j) => ({ formula: kisiToplamSatirlari.length ? kisiToplamSatirlari.map((x) => L(3 + j) + x).join('+') : '0' }))), { font: { bold: true, size: 12 } });
+    if (tarihler.length > 1) {
+      const kr = ws.getRow(r + 1);
+      yaz(kr, ['BİTKİ KAYBI (' + tk(tarihler[tarihler.length - 2]) + ' → ' + tk(tarihler[tarihler.length - 1]) + ')', '', { formula: `${L(nSut - 2)}${r}-${L(nSut - 1)}${r}` }], { font: { bold: true, color: { argb: 'FFB3261E' } } });
+    }
+    return wb;
+  }
+
   window.Rapor = {
+    bitkiIceAktar,
+    bitkiRaporu,
     hasatTahminRaporu,
     ilaclamaRaporu,
     donemKayitlari,

@@ -95,7 +95,7 @@
               <ul class="kayit-liste">${xs
                 .map(
                   ({ t: k, h }) => `<li><button data-df="hasat-duzenle" data-id="${k.id}">
-                  <span class="k-sol"><b>${esc(R.seraAdi(k.seraId))}</b><small>Ort. ${S.sayiYaz(h.ort)} meyve/${k.birim === 'sira' ? 'sıra' : 'bitki'} · ${S.sayiYaz(S.sayi(k.siraSayisi))} sıra${k.birim === 'sira' ? '' : ' × ' + S.sayiYaz(S.sayi(k.bitkiSira)) + ' bitki'}${S.sayi(k.fire) ? ' · fire %' + S.sayiYaz(S.sayi(k.fire)) : ''}</small>
+                  <span class="k-sol"><b>${esc(R.seraAdi(k.seraId))}</b><small>Ort. ${S.sayiYaz(h.ort)} meyve/${k.birim === 'sira' ? 'sıra' : 'bitki'} · ${k.toplamBitki ? Number(k.toplamBitki).toLocaleString('tr-TR') + ' bitki (sayım)' : S.sayiYaz(S.sayi(k.siraSayisi)) + ' sıra' + (k.birim === 'sira' ? '' : ' × ' + S.sayiYaz(S.sayi(k.bitkiSira)) + ' bitki')}${S.sayi(k.fire) ? ' · fire %' + S.sayiYaz(S.sayi(k.fire)) : ''}</small>
                   <small>${h.dizilimler.map((d) => `${dizilimMetni(d)} ${d.kutu === null ? '–' : d.kutu.toLocaleString('tr-TR')}`).join(' · ')}</small></span>
                   <span class="k-sag"><b>≈ ${h.ortKutu === null ? '–' : h.ortKutu.toLocaleString('tr-TR')}</b><small>kutu</small></span>
                 </button></li>`
@@ -142,7 +142,8 @@
          <div class="satir"><input id="t-sayim" inputmode="numeric" placeholder="ör. 12 (veya 10 12 8)"><button type="button" class="btn" id="t-sayim-ekle">Ekle</button></div>
          <div class="cip-liste" id="t-sayimlar"></div>
        </div>
-       <div class="iki">
+       <div id="t-sayimdan"></div>
+       <div class="iki" id="t-sira-kap">
          <label class="alan-blok"><span>Sıra sayısı</span><input id="t-sira" inputmode="decimal" value="${esc(S.sayiYaz(S.sayi(f.siraSayisi)))}"></label>
          <label class="alan-blok" id="t-bitki-kap"><span>Sıradaki bitki sayısı</span><input id="t-bitki" inputmode="numeric" value="${esc(S.sayiYaz(S.sayi(f.bitkiSira)))}"></label>
        </div>
@@ -168,6 +169,39 @@
           f.fire = S.sayi($('#t-fire', g).value) || 0;
           f.not = $('#t-not', g).value.trim();
           $$('#t-birim button', g).forEach((b) => b.classList.toggle('sec', b.dataset.v === f.birim));
+          // Bitki sayımı varsa toplam bitkiyi oradan al
+          const sayimVar = f.birim === 'bitki' && S.sonSayim(f.seraId);
+          const sk = S.d.sektorler.filter((x) => x.seraId === f.seraId);
+          const kutu = $('#t-sayimdan', g);
+          if (!sayimVar) {
+            kutu.innerHTML = '';
+            f.toplamBitki = null;
+          } else {
+            if (f.sayimdan === undefined) f.sayimdan = true;
+            const harfler = f.sektorHarf ? f.sektorHarf.split(',') : null;
+            const top = S.seraBitkiToplami(f.seraId, harfler);
+            f.toplamBitki = f.sayimdan ? top : null;
+            if (!kutu.dataset.kuruldu || kutu.dataset.sera !== f.seraId) {
+              kutu.innerHTML = `<label class="onay"><input type="checkbox" id="t-sayim-bitki" ${f.sayimdan ? 'checked' : ''}> <span>Bitki sayımındaki bitki sayısını kullan</span></label>
+                <label class="alan-blok" id="t-sektor-kap"><span>Kapsam</span><select id="t-sektor"><option value="">Tüm sera</option>${sk
+                  .map((x) => `<option value="${x.harfler.join(',')}" ${f.sektorHarf === x.harfler.join(',') ? 'selected' : ''}>Sektör ${esc(x.no)}</option>`)
+                  .join('')}</select></label><p class="ince" id="t-bitki-bilgi"></p>`;
+              kutu.dataset.kuruldu = '1';
+              kutu.dataset.sera = f.seraId;
+              $('#t-sayim-bitki', g).onchange = (e) => {
+                f.sayimdan = e.target.checked;
+                yenile();
+              };
+              $('#t-sektor', g).onchange = (e) => {
+                f.sektorHarf = e.target.value || null;
+                yenile();
+              };
+            }
+            $('#t-sektor-kap', g).hidden = !f.sayimdan;
+            const sy = S.sonSayim(f.seraId);
+            $('#t-bitki-bilgi', g).innerHTML = f.sayimdan ? `<b>${(top || 0).toLocaleString('tr-TR')}</b> bitki (sayım ${S.trTarih(sy.tarih)})` : '';
+          }
+          $('#t-sira-kap', g).hidden = !!f.toplamBitki;
           $('#t-bitki-kap', g).hidden = f.birim === 'sira';
           $('#t-sayim-etiket', g).textContent =
             f.birim === 'sira' ? 'Örnek sayımlar – bir sıradaki hasada hazır domates' : 'Örnek sayımlar – bir bitkideki hasada hazır domates';
@@ -239,8 +273,8 @@
           if ($('#t-sayim', g).value.trim()) sayimEkle();
           yenile();
           if (!f.sayimlar.length) return toast('En az bir örnek sayım girin');
-          if (!f.siraSayisi) return toast('Sıra sayısını girin');
-          if (f.birim === 'bitki' && !f.bitkiSira) return toast('Sıradaki bitki sayısını girin');
+          if (!f.toplamBitki && !f.siraSayisi) return toast('Sıra sayısını girin');
+          if (!f.toplamBitki && f.birim === 'bitki' && !f.bitkiSira) return toast('Sıradaki bitki sayısını girin');
           const s2 = S.sera(f.seraId);
           if (s2) {
             s2.siraSayisi = f.siraSayisi;
