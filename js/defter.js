@@ -1,4 +1,4 @@
-/* Sera Otomasyon – Defter: hasat ve ilaçlama kayıtları */
+/* Sera Otomasyon – Defter: hasat tahmini ve ilaçlama kayıtları */
 (function () {
   'use strict';
   const S = window.Store;
@@ -28,21 +28,12 @@
       .map((x) => `<option value="${esc(x)}">`)
       .join('')}</datalist>`;
   }
-  function sonDegerler(alan) {
-    const say = {};
-    S.d.hasatlar.forEach((h) => h[alan] && (say[S.trUpper(h[alan])] = (say[S.trUpper(h[alan])] || 0) + 1));
-    return Object.keys(say).sort((a, b) => say[b] - say[a]);
-  }
-  function tlYaz(n) {
-    return Number(n || 0).toLocaleString('tr-TR', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
-  }
-
   // =====================================================================
   function ciz() {
     const ekran = $('#ekran');
     if (!S.d.seralar.length) {
       ekran.innerHTML = `<div class="bos"><div class="bos-ikon">${ikon('defter')}</div><h2>Önce sera ekleyin</h2>
-        <p>Hasat ve ilaçlama kayıtları seralara bağlıdır. Personel sekmesinden sera ekleyin veya Excel'den içe aktarın.</p></div>`;
+        <p>Hasat tahmini ve ilaçlama kayıtları seralara bağlıdır. Personel sekmesinden sera ekleyin veya Excel'den içe aktarın.</p></div>`;
       return;
     }
     const [y, m] = ui.ay.split('-').map(Number);
@@ -50,7 +41,7 @@
     ekran.innerHTML = `
       <h1 class="baslik">Sera Defteri</h1>
       <div class="seg genis-seg" role="tablist">
-        <button role="tab" class="${ui.defter === 'hasat' ? 'sec geldi' : ''}" data-df="sekme" data-v="hasat">${ikon('hasat')} Hasat</button>
+        <button role="tab" class="${ui.defter === 'hasat' ? 'sec geldi' : ''}" data-df="sekme" data-v="hasat">${ikon('hasat')} Hasat Tahmini</button>
         <button role="tab" class="${ui.defter === 'ilac' ? 'sec geldi' : ''}" data-df="sekme" data-v="ilac">${ikon('ilac')} İlaçlama</button>
       </div>
       <div class="filtre">
@@ -60,164 +51,218 @@
       ${ui.defter === 'hasat' ? hasatHtml(y, m - 1, sid) : ilacHtml(y, m - 1, sid)}`;
   }
 
-  // ---------- HASAT ----------
+  // ---------- HASAT TAHMİNİ ----------
+  // Kutu: alt kata 6, üst kata 3/4/5 domates → kutu başı 9/10/11
+  function dizilimMetni(d) {
+    return `${d.adet}'${d.adet === 9 ? 'lu' : d.adet === 10 ? 'lu' : d.adet === 11 ? 'li' : 'lik'}`;
+  }
+  function sonucHtml(h) {
+    if (h.toplam === null)
+      return `<div class="tahmin-sonuc bos-sonuc">Sonuç için örnek sayım ve sıra sayısı${h.carpan ? '' : ' (ve bitki/sıra)'} girin.</div>`;
+    return `<div class="tahmin-sonuc">
+      <div class="ts-ust"><span>Ortalama <b>${S.sayiYaz(h.ort)}</b> meyve (${h.sayimSayisi} örnek)</span><span>Toplam ≈ <b>${h.toplam.toLocaleString('tr-TR')}</b> meyve</span></div>
+      <table class="ts-tablo"><tbody>${h.dizilimler
+        .map((d) => `<tr><td>Alt ${h.alt} + üst ${d.ust}</td><td>${d.adet} adet/kutu</td><td><b>${d.kutu.toLocaleString('tr-TR')}</b> kutu</td></tr>`)
+        .join('')}</tbody></table>
+      <div class="ts-ort"><span>Ortalama çıkacak kutu</span><b>≈ ${h.ortKutu.toLocaleString('tr-TR')}</b></div>
+    </div>`;
+  }
+
   function hasatHtml(y, ay, sid) {
-    const liste = R.donemKayitlari('hasatlar', y, ay, sid).slice().reverse();
-    const kg = liste.reduce((t, h) => t + (S.sayi(h.kg) || 0), 0);
-    const kasa = liste.reduce((t, h) => t + (S.sayi(h.kasa) || 0), 0);
-    const tutar = liste.reduce((t, h) => t + (S.sayi(h.kg) || 0) * (S.sayi(h.fiyat) || 0), 0);
-    const bugunBekleme = A.yard.beklemeBandi(sid, bugun());
+    const liste = R.donemKayitlari('tahminler', y, ay, sid).slice().reverse();
+    const hes = liste.map((t) => ({ t, h: S.tahminHesapla(t) }));
+    const topKutu = hes.reduce((a, x) => a + (x.h.ortKutu || 0), 0);
+    const topMeyve = hes.reduce((a, x) => a + (x.h.toplam || 0), 0);
     const gunler = {};
-    liste.forEach((h) => (gunler[h.tarih] = gunler[h.tarih] || []).push(h));
+    hes.forEach((x) => (gunler[x.t.tarih] = gunler[x.t.tarih] || []).push(x));
     return `
-      ${bugunBekleme}
+      ${A.yard.beklemeBandi(sid, bugun())}
       <section class="ozet-satir">
-        <div class="ozet-kutu"><b>${S.sayiYaz(Math.round(kg * 10) / 10)}</b><span>Toplam kg</span></div>
-        <div class="ozet-kutu"><b>${S.sayiYaz(kasa)}</b><span>Kasa</span></div>
-        <div class="ozet-kutu"><b>${kasa ? S.sayiYaz(Math.round((kg / kasa) * 10) / 10) : '–'}</b><span>Ort. kg/kasa</span></div>
-        <div class="ozet-kutu"><b>${tutar ? tlYaz(Math.round(tutar)) : '–'}</b><span>Tutar ₺</span></div>
+        <div class="ozet-kutu"><b>${liste.length}</b><span>Tahmin</span></div>
+        <div class="ozet-kutu"><b>${topMeyve.toLocaleString('tr-TR')}</b><span>Toplam meyve</span></div>
+        <div class="ozet-kutu"><b>${topKutu.toLocaleString('tr-TR')}</b><span>Ortalama kutu</span></div>
       </section>
       <div class="satir-btn">
-        <button class="btn birincil" data-df="hasat-ekle">${ikon('arti')} Hasat ekle</button>
+        <button class="btn birincil" data-df="hasat-ekle">${ikon('arti')} Tahmin yap</button>
         <button class="btn" data-df="hasat-excel">${ikon('excel')} Excel</button>
       </div>
       ${
-        Object.keys(gunler).length
+        liste.length
           ? Object.entries(gunler)
-              .map(([t, hs]) => {
-                const gkg = hs.reduce((a, h) => a + (S.sayi(h.kg) || 0), 0);
-                const gkasa = hs.reduce((a, h) => a + (S.sayi(h.kasa) || 0), 0);
-                return `<section class="panel kayit-grup">
-              <div class="grup-ust"><b>${S.trTarih(t)} ${S.GUNLER[S.strTarih(t).getDay()]}</b><span>${S.sayiYaz(Math.round(gkg * 10) / 10)} kg · ${S.sayiYaz(gkasa)} kasa</span></div>
-              <ul class="kayit-liste">${hs
+              .map(
+                ([t, xs]) => `<section class="panel kayit-grup">
+              <div class="grup-ust"><b>${S.trTarih(t)} ${S.GUNLER[S.strTarih(t).getDay()]}</b><span>≈ ${xs.reduce((a, x) => a + (x.h.ortKutu || 0), 0).toLocaleString('tr-TR')} kutu</span></div>
+              <ul class="kayit-liste">${xs
                 .map(
-                  (h) => `<li><button data-df="hasat-duzenle" data-id="${h.id}">
-                  <span class="k-sol"><b>${esc(R.seraAdi(h.seraId))} · ${esc(h.urun || 'Ürün')}</b><small>${esc([h.sinif, h.alici, h.not].filter(Boolean).join(' · '))}</small></span>
-                  <span class="k-sag"><b>${S.sayiYaz(S.sayi(h.kg))} kg</b><small>${S.sayi(h.kasa) !== null ? S.sayiYaz(S.sayi(h.kasa)) + ' kasa' : ''}${S.sayi(h.fiyat) !== null ? ' · ' + S.sayiYaz(S.sayi(h.fiyat)) + ' ₺/kg' : ''}</small></span>
+                  ({ t: k, h }) => `<li><button data-df="hasat-duzenle" data-id="${k.id}">
+                  <span class="k-sol"><b>${esc(R.seraAdi(k.seraId))}</b><small>Ort. ${S.sayiYaz(h.ort)} meyve/${k.birim === 'sira' ? 'sıra' : 'bitki'} · ${S.sayiYaz(S.sayi(k.siraSayisi))} sıra${k.birim === 'sira' ? '' : ' × ' + S.sayiYaz(S.sayi(k.bitkiSira)) + ' bitki'}${S.sayi(k.fire) ? ' · fire %' + S.sayiYaz(S.sayi(k.fire)) : ''}</small>
+                  <small>${h.dizilimler.map((d) => `${dizilimMetni(d)} ${d.kutu === null ? '–' : d.kutu.toLocaleString('tr-TR')}`).join(' · ')}</small></span>
+                  <span class="k-sag"><b>≈ ${h.ortKutu === null ? '–' : h.ortKutu.toLocaleString('tr-TR')}</b><small>kutu</small></span>
                 </button></li>`
                 )
-                .join('')}</ul></section>`;
-              })
+                .join('')}</ul></section>`
+              )
               .join('')
-          : `<p class="ince orta">Bu dönemde hasat kaydı yok.</p>`
+          : `<p class="ince orta">Bu dönemde hasat tahmini yok. “Tahmin yap” ile örnek bitkilerde hasada hazır domatesleri sayarak başlayın.</p>`
       }`;
   }
 
-  function hasatFormu(h) {
-    const yeni = !h;
-    const son = S.d.hasatlar[S.d.hasatlar.length - 1] || {};
-    h = h || {
-      tarih: ui.tarih || bugun(),
-      seraId: ui.defterSera || ui.seraId || (S.d.seralar[0] || {}).id,
-      urun: son.urun || '',
-      sinif: '1. SINIF',
-      kasa: '',
-      kg: '',
-      alici: son.alici || '',
-      fiyat: '',
-      not: '',
-    };
+  function hasatFormu(kayit) {
+    const yeni = !kayit;
+    const seraId = (kayit && kayit.seraId) || ui.defterSera || ui.seraId || (S.d.seralar[0] || {}).id;
+    const sera = S.sera(seraId) || {};
+    const f = kayit
+      ? JSON.parse(JSON.stringify(kayit))
+      : {
+          tarih: ui.tarih || bugun(),
+          seraId,
+          birim: sera.tahminBirim || 'bitki',
+          sayimlar: [],
+          siraSayisi: sera.siraSayisi || S.seraSiraToplami(seraId),
+          bitkiSira: sera.bitkiSira || null,
+          altKat: 6,
+          ustKatlar: S.UST_KATLAR.slice(),
+          fire: 0,
+          not: '',
+        };
+    const UST_SECENEK = [2, 3, 4, 5, 6];
     sayfaAc(
-      yeni ? 'Hasat ekle' : 'Hasatı düzenle',
+      yeni ? 'Hasat tahmini' : 'Tahmini düzenle',
       `<div class="iki">
-         <label class="alan-blok"><span>Tarih</span><input type="date" id="h-tarih" value="${h.tarih}"></label>
-         <label class="alan-blok"><span>Sera</span><select id="h-sera">${seraSecenekleri(h.seraId)}</select></label>
+         <label class="alan-blok"><span>Tarih</span><input type="date" id="t-tarih" value="${f.tarih}"></label>
+         <label class="alan-blok"><span>Sera</span><select id="t-sera">${seraSecenekleri(f.seraId)}</select></label>
        </div>
-       <div id="h-uyari"></div>
-       <label class="alan-blok"><span>Ürün / çeşit</span><input id="h-urun" list="dl-urun" value="${esc(h.urun)}" placeholder="ör. DOMATES, CHERRY" autocapitalize="characters"></label>
-       <label class="alan-blok"><span>Sınıf</span><input id="h-sinif" list="dl-sinif" value="${esc(h.sinif)}"></label>
+       <div id="t-uyari"></div>
+       <div class="alan-blok"><span>Sayım birimi</span>
+         <div class="seg genis-seg" id="t-birim">
+           <button type="button" data-v="bitki">Bitki başına</button>
+           <button type="button" data-v="sira">Sıra başına</button>
+         </div></div>
+       <div class="alan-blok"><span id="t-sayim-etiket"></span>
+         <div class="satir"><input id="t-sayim" inputmode="numeric" placeholder="ör. 12 (veya 10 12 8)"><button type="button" class="btn" id="t-sayim-ekle">Ekle</button></div>
+         <div class="cip-liste" id="t-sayimlar"></div>
+       </div>
        <div class="iki">
-         <label class="alan-blok"><span>Kasa</span><input id="h-kasa" inputmode="decimal" value="${esc(S.sayiYaz(S.sayi(h.kasa)))}"></label>
-         <label class="alan-blok"><span>Kg</span><input id="h-kg" inputmode="decimal" value="${esc(S.sayiYaz(S.sayi(h.kg)))}"></label>
+         <label class="alan-blok"><span>Sıra sayısı</span><input id="t-sira" inputmode="decimal" value="${esc(S.sayiYaz(S.sayi(f.siraSayisi)))}"></label>
+         <label class="alan-blok" id="t-bitki-kap"><span>Sıradaki bitki sayısı</span><input id="t-bitki" inputmode="numeric" value="${esc(S.sayiYaz(S.sayi(f.bitkiSira)))}"></label>
        </div>
-       <p class="ince" id="h-ipucu"></p>
+       <div class="alan-blok"><span>Kutu dizilimi</span>
+         <div class="dizilim">
+           <label>Alt kat <input id="t-alt" inputmode="numeric" value="${esc(S.sayiYaz(S.sayi(f.altKat) || 6))}"></label>
+           <div><small>Üst kat</small><div class="cip-liste" id="t-ust">${UST_SECENEK.map((u) => `<button type="button" class="cip" data-u="${u}">${u}'${u === 3 || u === 4 ? 'lü' : u === 6 ? 'lı' : u === 2 ? 'li' : 'li'}</button>`).join('')}</div></div>
+         </div></div>
        <div class="iki">
-         <label class="alan-blok"><span>Alıcı / yer (opsiyonel)</span><input id="h-alici" list="dl-alici" value="${esc(h.alici)}"></label>
-         <label class="alan-blok"><span>Fiyat ₺/kg (opsiyonel)</span><input id="h-fiyat" inputmode="decimal" value="${esc(S.sayiYaz(S.sayi(h.fiyat)))}"></label>
+         <label class="alan-blok"><span>Fire / kayıp %</span><input id="t-fire" inputmode="decimal" value="${esc(S.sayiYaz(S.sayi(f.fire) || 0))}"></label>
+         <label class="alan-blok"><span>Not</span><input id="t-not" value="${esc(f.not || '')}"></label>
        </div>
-       <label class="alan-blok"><span>Not</span><input id="h-not" value="${esc(h.not)}"></label>
-       <button class="btn birincil genis" id="h-kaydet">Kaydet</button>
-       ${yeni ? '<button class="btn genis" id="h-kaydet-yeni">Kaydet ve yeni ekle</button>' : '<button class="btn tehlike genis" id="h-sil">Sil</button>'}
-       ${datalist('dl-urun', sonDegerler('urun').concat(['DOMATES', 'CHERRY DOMATES', 'SALKIM DOMATES', 'BİBER', 'SALATALIK', 'PATLICAN']))}
-       ${datalist('dl-sinif', S.SINIFLAR.concat(sonDegerler('sinif')))}
-       ${datalist('dl-alici', sonDegerler('alici'))}`,
+       <div id="t-sonuc"></div>
+       <button class="btn birincil genis" id="t-kaydet">Kaydet</button>
+       ${yeni ? '' : '<button class="btn tehlike genis" id="t-sil">Sil</button>'}`,
       (g) => {
-        const uyar = () => {
-          const l = S.beklemeUyarilari($('#h-sera', g).value, $('#h-tarih', g).value);
-          $('#h-uyari', g).innerHTML = l.length
-            ? `<div class="bekleme-bant">${ikon('uyari')}<div><b>Dikkat: bekleme süresi dolmadı!</b>${l
-                .map((il) => `<span>${esc(il.ilac)} – ${S.trTarih(il.tarih)} uygulandı, ${S.trTarih(S.uygunTarih(il))} tarihinden itibaren hasat</span>`)
+        const yenile = () => {
+          f.tarih = $('#t-tarih', g).value || bugun();
+          f.seraId = $('#t-sera', g).value;
+          f.siraSayisi = S.sayi($('#t-sira', g).value);
+          f.bitkiSira = S.sayi($('#t-bitki', g).value);
+          f.altKat = S.sayi($('#t-alt', g).value) || 6;
+          f.fire = S.sayi($('#t-fire', g).value) || 0;
+          f.not = $('#t-not', g).value.trim();
+          $$('#t-birim button', g).forEach((b) => b.classList.toggle('sec', b.dataset.v === f.birim));
+          $('#t-bitki-kap', g).hidden = f.birim === 'sira';
+          $('#t-sayim-etiket', g).textContent =
+            f.birim === 'sira' ? 'Örnek sayımlar – bir sıradaki hasada hazır domates' : 'Örnek sayımlar – bir bitkideki hasada hazır domates';
+          $('#t-sayimlar', g).innerHTML = f.sayimlar.length
+            ? f.sayimlar.map((n, i) => `<button type="button" class="cip sayim" data-i="${i}">${S.sayiYaz(n)} ✕</button>`).join('')
+            : '<small class="ince">Henüz sayım yok. Seradan rastgele birkaç örnek sayın.</small>';
+          $$('#t-ust .cip', g).forEach((b) => b.classList.toggle('aktif', f.ustKatlar.includes(+b.dataset.u)));
+          $('#t-sonuc', g).innerHTML = sonucHtml(S.tahminHesapla(f));
+          const l = S.beklemeUyarilari(f.seraId, f.tarih);
+          $('#t-uyari', g).innerHTML = l.length
+            ? `<div class="bekleme-bant">${ikon('uyari')}<div><b>İlaç bekleme süresi dolmadı!</b>${l
+                .map((il) => `<span>${esc(il.ilac)} – ${S.trTarih(S.uygunTarih(il))} tarihinden itibaren hasat</span>`)
                 .join('')}</div></div>`
             : '';
-          return l.length;
         };
-        const ipucu = () => {
-          const kasa = S.sayi($('#h-kasa', g).value);
-          const kg = S.sayi($('#h-kg', g).value);
-          const fiyat = S.sayi($('#h-fiyat', g).value);
-          const p = [];
-          if (kasa && kg) p.push(`Ortalama ${S.sayiYaz(Math.round((kg / kasa) * 100) / 100)} kg/kasa`);
-          if (kg && fiyat) p.push(`Tutar ${tlYaz(kg * fiyat)} ₺`);
-          if (kasa && !kg) {
-            const ort = ortalamaKgKasa($('#h-urun', g).value);
-            if (ort) p.push(`Bu ürünün ortalaması ${S.sayiYaz(ort)} kg/kasa → tahmini ${S.sayiYaz(Math.round(kasa * ort))} kg`);
-          }
-          $('#h-ipucu', g).textContent = p.join(' · ');
+        const sayimEkle = () => {
+          const v = $('#t-sayim', g).value;
+          // "10 12 8", "10,12,8" veya "10; 12" — "7,5" ondalık kabul edilir
+          v.trim()
+            .split(/[\s;]+/)
+            .flatMap((x) => (/^\d+(,\d+)+$/.test(x) && !/^\d+,5$/.test(x) ? x.split(',') : [x]))
+            .map(S.sayi)
+            .filter((n) => n !== null && n >= 0)
+            .forEach((n) => f.sayimlar.push(n));
+          $('#t-sayim', g).value = '';
+          $('#t-sayim', g).focus();
+          yenile();
         };
-        uyar();
-        ipucu();
-        ['#h-sera', '#h-tarih'].forEach((s) => $(s, g).addEventListener('change', uyar));
-        ['#h-kasa', '#h-kg', '#h-fiyat', '#h-urun'].forEach((s) => $(s, g).addEventListener('input', ipucu));
-        const kaydet = (devam) => {
-          const veri = {
-            id: h.id,
-            tarih: $('#h-tarih', g).value || bugun(),
-            seraId: $('#h-sera', g).value,
-            urun: S.trUpper($('#h-urun', g).value.trim()),
-            sinif: S.trUpper($('#h-sinif', g).value.trim()),
-            kasa: S.sayi($('#h-kasa', g).value),
-            kg: S.sayi($('#h-kg', g).value),
-            alici: S.trUpper($('#h-alici', g).value.trim()),
-            fiyat: S.sayi($('#h-fiyat', g).value),
-            not: $('#h-not', g).value.trim(),
-          };
-          if (veri.kg === null && veri.kasa === null) return toast('Kasa veya kg girin');
-          if (veri.kg === null && veri.kasa) {
-            const ort = ortalamaKgKasa(veri.urun);
-            if (ort && confirm(`Kg girilmedi. Ortalamaya göre tahmini ${S.sayiYaz(Math.round(veri.kasa * ort))} kg yazılsın mı?`)) veri.kg = Math.round(veri.kasa * ort);
+        $('#t-sayim-ekle', g).onclick = sayimEkle;
+        $('#t-sayim', g).addEventListener('keydown', (e) => {
+          if (e.key === 'Enter') {
+            e.preventDefault();
+            sayimEkle();
           }
-          if (uyar() && !confirm('Bu serada ilaç bekleme süresi dolmamış. Yine de kaydedilsin mi?')) return;
-          S.kayitKaydet('hasatlar', veri);
-          ui.ay = veri.tarih.slice(0, 7);
-          toast('Hasat kaydedildi');
-          if (devam) {
-            hasatFormu(null);
-            $('#h-tarih').value = veri.tarih;
-            $('#h-sera').value = veri.seraId;
-          } else sayfaKapat();
+        });
+        $('#t-sayimlar', g).addEventListener('click', (e) => {
+          const b = e.target.closest('[data-i]');
+          if (!b) return;
+          f.sayimlar.splice(+b.dataset.i, 1);
+          yenile();
+        });
+        $('#t-birim', g).addEventListener('click', (e) => {
+          const b = e.target.closest('[data-v]');
+          if (!b) return;
+          f.birim = b.dataset.v;
+          yenile();
+        });
+        $('#t-ust', g).addEventListener('click', (e) => {
+          const b = e.target.closest('[data-u]');
+          if (!b) return;
+          const u = +b.dataset.u;
+          f.ustKatlar = f.ustKatlar.includes(u) ? f.ustKatlar.filter((x) => x !== u) : f.ustKatlar.concat(u).sort((a, c) => a - c);
+          if (!f.ustKatlar.length) f.ustKatlar = [u];
+          yenile();
+        });
+        $('#t-sera', g).addEventListener('change', () => {
+          const s2 = S.sera($('#t-sera', g).value) || {};
+          if (yeni) {
+            $('#t-sira', g).value = S.sayiYaz(s2.siraSayisi || S.seraSiraToplami(s2.id));
+            $('#t-bitki', g).value = S.sayiYaz(s2.bitkiSira);
+          }
+          yenile();
+        });
+        ['#t-tarih', '#t-sira', '#t-bitki', '#t-alt', '#t-fire', '#t-not'].forEach((sel) => $(sel, g).addEventListener('input', yenile));
+        $('#t-tarih', g).addEventListener('change', yenile);
+        yenile();
+
+        $('#t-kaydet', g).onclick = () => {
+          if ($('#t-sayim', g).value.trim()) sayimEkle();
+          yenile();
+          if (!f.sayimlar.length) return toast('En az bir örnek sayım girin');
+          if (!f.siraSayisi) return toast('Sıra sayısını girin');
+          if (f.birim === 'bitki' && !f.bitkiSira) return toast('Sıradaki bitki sayısını girin');
+          const s2 = S.sera(f.seraId);
+          if (s2) {
+            s2.siraSayisi = f.siraSayisi;
+            if (f.bitkiSira) s2.bitkiSira = f.bitkiSira;
+            s2.tahminBirim = f.birim;
+          }
+          S.kayitKaydet('tahminler', f);
+          ui.ay = f.tarih.slice(0, 7);
+          toast('Tahmin kaydedildi');
+          sayfaKapat();
           ciz();
         };
-        $('#h-kaydet', g).onclick = () => kaydet(false);
-        const ky = $('#h-kaydet-yeni', g);
-        if (ky) ky.onclick = () => kaydet(true);
-        const sil = $('#h-sil', g);
+        const sil = $('#t-sil', g);
         if (sil)
           sil.onclick = () => {
-            if (!confirm('Bu hasat kaydı silinsin mi?')) return;
-            S.kayitSil('hasatlar', h.id);
+            if (!confirm('Bu tahmin silinsin mi?')) return;
+            S.kayitSil('tahminler', f.id);
             sayfaKapat();
             ciz();
           };
       }
     );
-  }
-
-  function ortalamaKgKasa(urun) {
-    const u = S.trUpper(urun || '');
-    const l = S.d.hasatlar.filter((h) => S.sayi(h.kasa) && S.sayi(h.kg) && (!u || S.trUpper(h.urun) === u));
-    const kasa = l.reduce((t, h) => t + S.sayi(h.kasa), 0);
-    const kg = l.reduce((t, h) => t + S.sayi(h.kg), 0);
-    return kasa ? Math.round((kg / kasa) * 10) / 10 : null;
   }
 
   // ---------- İLAÇLAMA ----------
@@ -359,8 +404,8 @@
     const [y, m] = ui.ay.split('-').map(Number);
     const sid = ui.defterSera || null;
     calis('Rapor', async () => {
-      const wb = tur === 'hasat' ? await R.hasatRaporu(y, m - 1, sid) : await R.ilaclamaRaporu(y, m - 1, sid);
-      dosyaHazir(await R.blob(wb), `${S.AYLAR[m - 1]} ${y} ${R.seraAdi(sid)} ${tur === 'hasat' ? 'HASAT RAPORU' : 'İLAÇLAMA KAYITLARI'}.xlsx`);
+      const wb = tur === 'hasat' ? await R.hasatTahminRaporu(y, m - 1, sid) : await R.ilaclamaRaporu(y, m - 1, sid);
+      dosyaHazir(await R.blob(wb), `${S.AYLAR[m - 1]} ${y} ${R.seraAdi(sid)} ${tur === 'hasat' ? 'HASAT TAHMİNİ' : 'İLAÇLAMA KAYITLARI'}.xlsx`);
     });
   }
 
@@ -378,7 +423,7 @@
       case 'hasat-ekle':
         return hasatFormu(null);
       case 'hasat-duzenle':
-        return hasatFormu(Object.assign({}, S.d.hasatlar.find((x) => x.id === b.dataset.id)));
+        return hasatFormu(S.d.tahminler.find((x) => x.id === b.dataset.id));
       case 'ilac-ekle':
         return ilacFormu(null);
       case 'ilac-duzenle':

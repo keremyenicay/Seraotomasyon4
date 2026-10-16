@@ -38,6 +38,7 @@
       isTurleri: VARSAYILAN_ISLER.slice(),
       gunler: {},
       hasatlar: [],
+      tahminler: [],
       ilaclamalar: [],
       ayarlar: { pazarTatil: true, sonYedek: null, kurulum: new Date().toISOString() },
     };
@@ -69,6 +70,7 @@
     d.gunler = d.gunler || {};
     d.hasatlar = Array.isArray(d.hasatlar) ? d.hasatlar : [];
     d.ilaclamalar = Array.isArray(d.ilaclamalar) ? d.ilaclamalar : [];
+    d.tahminler = Array.isArray(d.tahminler) ? d.tahminler : [];
     return d;
   }
 
@@ -277,6 +279,27 @@
       (il) => (sayi(il.bekleme) || 0) > 0 && (!il.seraId || !seraId || il.seraId === seraId) && il.tarih <= t && uygunTarih(il) > t
     );
   }
+  // ---- Hasat tahmini: kutu alt kat 6, üst kat 3/4/5 ----
+  const UST_KATLAR = [3, 4, 5];
+  function tahminHesapla(t) {
+    const sayimlar = (t.sayimlar || []).map(sayi).filter((n) => n !== null && n >= 0);
+    const ort = sayimlar.length ? sayimlar.reduce((a, b) => a + b, 0) / sayimlar.length : null;
+    const sira = sayi(t.siraSayisi) || 0;
+    const carpan = t.birim === 'sira' ? sira : sira * (sayi(t.bitkiSira) || 0);
+    const fire = Math.min(100, Math.max(0, sayi(t.fire) || 0));
+    const toplam = ort !== null && carpan ? Math.round(ort * carpan * (1 - fire / 100)) : null;
+    const alt = sayi(t.altKat) || 6;
+    const ustler = (t.ustKatlar && t.ustKatlar.length ? t.ustKatlar : UST_KATLAR).map(sayi).filter((n) => n > 0);
+    const dizilimler = ustler.map((u) => ({ ust: u, adet: alt + u, kutu: toplam !== null ? Math.ceil(toplam / (alt + u)) : null }));
+    const kutular = dizilimler.map((x) => x.kutu).filter((n) => n !== null);
+    const ortKutu = kutular.length ? Math.round(kutular.reduce((a, b) => a + b, 0) / kutular.length) : null;
+    return { ort: ort !== null ? Math.round(ort * 100) / 100 : null, sayimSayisi: sayimlar.length, carpan, toplam, alt, dizilimler, ortKutu };
+  }
+  // Serada personelin toplam sıra sayısı (tahmin için öneri)
+  function seraSiraToplami(seraId) {
+    return durum.personel.filter((p) => p.seraId === seraId && p.aktif).reduce((t, p) => t + (sayi(p.toplamSira) || 0), 0) || null;
+  }
+
   // Önceki kayıtlardan ilaç kataloğu (ada göre son değerler)
   function ilacKatalogu() {
     const k = {};
@@ -350,6 +373,9 @@
     uygunTarih,
     beklemeUyarilari,
     ilacKatalogu,
+    UST_KATLAR,
+    tahminHesapla,
+    seraSiraToplami,
     disaAktarJSON,
     iceAktarJSON,
     sifirla,

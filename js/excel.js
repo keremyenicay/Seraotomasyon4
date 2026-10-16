@@ -576,96 +576,77 @@
     }
   }
 
-  async function hasatRaporu(yil, ay, seraId) {
+  async function hasatTahminRaporu(yil, ay, seraId) {
     const wb = new ExcelJS.Workbook();
     wb.creator = 'Sera Otomasyon';
-    const kayitlar = donemKayitlari('hasatlar', yil, ay, seraId);
-    const donem = `${S.AYLAR[ay]} ${yil}`;
-
-    // 1) Tüm kayıtlar
-    const ws = wb.addWorksheet('HASAT KAYITLARI', {
+    const kayitlar = donemKayitlari('tahminler', yil, ay, seraId);
+    const ws = wb.addWorksheet('HASAT TAHMİNİ', {
       pageSetup: { paperSize: 9, orientation: 'landscape', fitToPage: true, fitToWidth: 1, fitToHeight: 0 },
     });
-    const bas = ['TARİH', 'SERA', 'ÜRÜN / ÇEŞİT', 'SINIF', 'KASA', 'KG', 'ORT. KG/KASA', 'ALICI / YER', 'FİYAT (₺/KG)', 'TUTAR (₺)', 'NOT'];
-    tabloBasligi(ws, `HASAT RAPORU – ${donem} – ${seraAdi(seraId)}`, bas, [12, 12, 20, 11, 9, 11, 11, 18, 11, 13, 28]);
-    let r = 3;
-    kayitlar.forEach((h) => {
+    const hes = kayitlar.map((t) => ({ t, h: S.tahminHesapla(t) }));
+    const ustler = Array.from(new Set([].concat(...hes.map((x) => x.h.dizilimler.map((d) => d.ust))).concat(kayitlar.length ? [] : S.UST_KATLAR))).sort((a, b) => a - b);
+    const alt = hes.length ? hes[0].h.alt : 6;
+    const ek = (n) => (n === 9 || n === 10 || n === 6 ? (n === 6 ? 'LI' : 'LU') : n === 7 || n === 8 || n === 11 || n === 12 ? 'Lİ' : 'LIK');
+    const bas = ['TARİH', 'SERA', 'SAYIM BİRİMİ', 'ÖRNEK SAYIMLAR', 'ORT. MEYVE', 'SIRA SAYISI', 'BİTKİ / SIRA', 'FİRE %', 'TOPLAM MEYVE (TAHMİNİ)']
+      .concat(ustler.map((u) => `ALT ${alt} + ÜST ${u} = ${alt + u}'${ek(alt + u)} KUTU`))
+      .concat(['ORTALAMA KUTU', 'NOT']);
+    tabloBasligi(ws, `HASAT TAHMİNİ – ${S.AYLAR[ay]} ${yil} – ${seraAdi(seraId)}`, bas, [12, 12, 10, 24, 10, 9, 9, 8, 14].concat(ustler.map(() => 14), [13, 24]));
+    const L = (n) => ws.getColumn(n).letter;
+    const kutuIlk = 10;
+    const ortKol = kutuIlk + ustler.length;
+    hes.forEach(({ t, h }, i) => {
+      const r = 3 + i;
       const row = ws.getRow(r);
-      tarihHucre(row.getCell(1), h.tarih);
-      row.getCell(2).value = seraAdi(h.seraId);
-      row.getCell(3).value = h.urun || null;
-      row.getCell(4).value = h.sinif || null;
-      row.getCell(5).value = S.sayi(h.kasa);
-      row.getCell(6).value = S.sayi(h.kg);
-      const kasa = S.sayi(h.kasa), kg = S.sayi(h.kg), fiyat = S.sayi(h.fiyat);
-      row.getCell(7).value = { formula: `IF(E${r}>0,ROUND(F${r}/E${r},2),"")`, result: kasa && kg !== null ? Math.round((kg / kasa) * 100) / 100 : '' };
-      row.getCell(8).value = h.alici || null;
-      row.getCell(9).value = fiyat;
-      row.getCell(10).value = fiyat !== null ? { formula: `F${r}*I${r}`, result: (kg || 0) * fiyat } : null;
-      row.getCell(11).value = h.not || null;
-      row.getCell(9).numFmt = '#,##0.00';
-      row.getCell(10).numFmt = '#,##0.00';
-      [1, 4, 5, 6, 7].forEach((i) => (row.getCell(i).alignment = { horizontal: 'center' }));
+      tarihHucre(row.getCell(1), t.tarih);
+      row.getCell(2).value = seraAdi(t.seraId);
+      row.getCell(3).value = t.birim === 'sira' ? 'SIRA' : 'BİTKİ';
+      row.getCell(4).value = (t.sayimlar || []).map((n) => S.sayiYaz(n)).join(' - ');
+      row.getCell(5).value = h.ort;
+      row.getCell(6).value = S.sayi(t.siraSayisi);
+      row.getCell(7).value = t.birim === 'sira' ? null : S.sayi(t.bitkiSira);
+      row.getCell(8).value = S.sayi(t.fire) || 0;
+      row.getCell(9).value = {
+        formula: t.birim === 'sira' ? `ROUND(E${r}*F${r}*(1-H${r}/100),0)` : `ROUND(E${r}*F${r}*G${r}*(1-H${r}/100),0)`,
+        result: h.toplam,
+      };
+      const secili = [];
+      ustler.forEach((u, j) => {
+        const c = row.getCell(kutuIlk + j);
+        const d = h.dizilimler.find((x) => x.ust === u);
+        const adet = h.alt + u;
+        c.value = { formula: `ROUNDUP(I${r}/${adet},0)`, result: h.toplam !== null ? Math.ceil(h.toplam / adet) : 0 };
+        if (d) secili.push(L(kutuIlk + j) + r);
+        else c.font = { color: { argb: 'FF999999' } };
+      });
+      row.getCell(ortKol).value = secili.length ? { formula: `ROUND(AVERAGE(${secili.join(',')}),0)`, result: h.ortKutu } : h.ortKutu;
+      row.getCell(ortKol).font = { bold: true };
+      row.getCell(ortKol + 1).value = t.not || null;
       satirKenar(row, bas.length);
-      r++;
+      for (let c = 1; c <= ortKol; c++) if (c !== 4) row.getCell(c).alignment = { horizontal: 'center', vertical: 'middle' };
     });
-    const son = r - 1;
+    const r = 3 + hes.length;
     const top = ws.getRow(r);
     top.getCell(1).value = 'TOPLAM';
-    ws.mergeCells(r, 1, r, 4);
-    const tk = kayitlar.reduce((t, h) => t + (S.sayi(h.kasa) || 0), 0);
-    const tg = kayitlar.reduce((t, h) => t + (S.sayi(h.kg) || 0), 0);
-    const tt = kayitlar.reduce((t, h) => t + (S.sayi(h.kg) || 0) * (S.sayi(h.fiyat) || 0), 0);
-    top.getCell(5).value = { formula: `SUM(E3:E${Math.max(3, son)})`, result: tk };
-    top.getCell(6).value = { formula: `SUM(F3:F${Math.max(3, son)})`, result: tg };
-    top.getCell(7).value = { formula: `IF(E${r}>0,ROUND(F${r}/E${r},2),"")`, result: tk ? Math.round((tg / tk) * 100) / 100 : '' };
-    top.getCell(10).value = { formula: `SUM(J3:J${Math.max(3, son)})`, result: tt };
-    top.getCell(10).numFmt = '#,##0.00';
-    for (let i = 1; i <= bas.length; i++) {
-      const c = top.getCell(i);
-      c.font = { bold: true };
-      c.fill = dolgu(MAVI);
-      c.border = KENAR;
-      if (i >= 5 && i <= 7) c.alignment = { horizontal: 'center' };
+    ws.mergeCells(r, 1, r, 8);
+    const son = Math.max(3, r - 1);
+    [9].concat(ustler.map((_, j) => kutuIlk + j), [ortKol]).forEach((c) => {
+      const harf = L(c);
+      let toplam = 0;
+      for (let i = 3; i < r; i++) {
+        const v = ws.getCell(i, c).value;
+        toplam += (v && typeof v === 'object' ? v.result : v) || 0;
+      }
+      top.getCell(c).value = { formula: `SUM(${harf}3:${harf}${son})`, result: toplam };
+    });
+    for (let c = 1; c <= bas.length; c++) {
+      const cell = top.getCell(c);
+      cell.font = { bold: true };
+      cell.fill = dolgu(MAVI);
+      cell.border = KENAR;
+      cell.alignment = { horizontal: 'center' };
     }
-
-    // 2) Günlük özet: gün x sera (kg)
-    const seralar = seraId ? [S.sera(seraId)].filter(Boolean) : S.d.seralar;
-    const wg = wb.addWorksheet('GÜNLÜK ÖZET (KG)');
-    const gb = ['TARİH'].concat(seralar.map((x) => x.ad + ' KG'), ['TOPLAM KG', 'TOPLAM KASA']);
-    tabloBasligi(wg, `GÜNLÜK HASAT ÖZETİ – ${donem}`, gb, [12].concat(seralar.map(() => 13), [13, 13]));
-    const gunler = Array.from(new Set(kayitlar.map((h) => h.tarih))).sort();
-    gunler.forEach((t, i) => {
-      const row = wg.getRow(3 + i);
-      tarihHucre(row.getCell(1), t);
-      const gk = kayitlar.filter((h) => h.tarih === t);
-      seralar.forEach((x, j) => (row.getCell(2 + j).value = Math.round(gk.filter((h) => h.seraId === x.id).reduce((a, h) => a + (S.sayi(h.kg) || 0), 0) * 100) / 100));
-      row.getCell(2 + seralar.length).value = Math.round(gk.reduce((a, h) => a + (S.sayi(h.kg) || 0), 0) * 100) / 100;
-      row.getCell(3 + seralar.length).value = gk.reduce((a, h) => a + (S.sayi(h.kasa) || 0), 0);
-      satirKenar(row, gb.length);
-      for (let c = 1; c <= gb.length; c++) row.getCell(c).alignment = { horizontal: 'center' };
-    });
-
-    // 3) Ürün / sınıf özeti
-    const wu = wb.addWorksheet('ÜRÜN ÖZETİ');
-    const ub = ['SERA', 'ÜRÜN / ÇEŞİT', 'SINIF', 'KASA', 'KG', 'TUTAR (₺)'];
-    tabloBasligi(wu, `ÜRÜN VE SINIF ÖZETİ – ${donem}`, ub, [14, 22, 12, 10, 12, 14]);
-    const grup = {};
-    kayitlar.forEach((h) => {
-      const k = [seraAdi(h.seraId), S.trUpper(h.urun || '-'), S.trUpper(h.sinif || '-')].join('|');
-      const g = (grup[k] = grup[k] || { kasa: 0, kg: 0, tutar: 0 });
-      g.kasa += S.sayi(h.kasa) || 0;
-      g.kg += S.sayi(h.kg) || 0;
-      g.tutar += (S.sayi(h.kg) || 0) * (S.sayi(h.fiyat) || 0);
-    });
-    Object.keys(grup).sort().forEach((k, i) => {
-      const row = wu.getRow(3 + i);
-      const [a, b, c] = k.split('|');
-      const g = grup[k];
-      [a, b, c, g.kasa, Math.round(g.kg * 100) / 100, g.tutar || null].forEach((v, j) => (row.getCell(j + 1).value = v));
-      row.getCell(6).numFmt = '#,##0.00';
-      satirKenar(row, ub.length);
-    });
+    ws.getCell(r + 2, 1).value = `Kutu dizilimi: alt kata ${alt}, üst kata ${ustler.join(' / ')} domates. Kutu sayısı = toplam meyve ÷ kutu başı adet (yukarı yuvarlanır). Ortalama kutu, seçilen dizilimlerin ortalamasıdır.`;
+    ws.getCell(r + 2, 1).font = { italic: true, size: 9, color: { argb: 'FF666666' } };
     return wb;
   }
 
@@ -693,7 +674,7 @@
   }
 
   window.Rapor = {
-    hasatRaporu,
+    hasatTahminRaporu,
     ilaclamaRaporu,
     donemKayitlari,
     seraAdi,
