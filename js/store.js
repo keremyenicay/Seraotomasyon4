@@ -601,6 +601,20 @@
     durum = bosDurum();
     kaydet(true);
   }
+  // Yalnızca girilen raporları sil: günlük kayıtlar, hasat, ilaçlama ve hasat tahminleri.
+  // Seralar, personel, harita/sektörler, yerleşim (sıralar), bitki sayımları, karantina,
+  // iş türleri ve ayarlar korunur.
+  const RAPOR_LISTELERI = ['hasatlar', 'ilaclamalar', 'tahminler'];
+  function raporOzeti() {
+    const o = { gun: Object.keys(durum.gunler).length };
+    RAPOR_LISTELERI.forEach((k) => (o[k] = durum[k].length));
+    return o;
+  }
+  function raporlariSil() {
+    durum.gunler = {};
+    RAPOR_LISTELERI.forEach((k) => (durum[k] = []));
+    kaydet(true);
+  }
 
   // ---- Bulut senkronu için parçalar ----
   // Her bölüm ayrı parça, günlük kayıtlar gün başına ayrı parça; böylece iki telefon
@@ -717,6 +731,8 @@
     disaAktarJSON,
     iceAktarJSON,
     sifirla,
+    raporOzeti,
+    raporlariSil,
     parcalar,
     parcaUygula,
     parcalarBitti,

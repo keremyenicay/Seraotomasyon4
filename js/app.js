@@ -1047,6 +1047,8 @@
         <ol class="adimlar"><li>Bu sayfayı <b>Safari</b>'de açın.</li><li>Alttaki <b>Paylaş</b> düğmesine dokunun.</li><li><b>Ana Ekrana Ekle</b>'yi seçin.</li><li>Uygulama artık internetsiz de açılır.</li></ol>
       </section>
       <section class="panel">
+        <button class="btn tehlike genis" id="rapor-sil">Sadece raporları sil</button>
+        <p class="ince">Günlük kayıtlar, hasat, ilaçlama ve hasat tahminleri silinir. Harita, personel, seralar, sıralar, bitki sayımları ve karantinalar korunur.</p>
         <button class="btn tehlike genis" id="sifirla">Tüm verileri sil</button>
         <p class="ince orta">Sera Otomasyon · v1.6</p>
       </section>`;
@@ -1094,6 +1096,16 @@
     $('#pazar').onchange = (e) => {
       S.d.ayarlar.pazarTatil = e.target.checked;
       S.kaydet();
+    };
+    $('#rapor-sil').onclick = () => {
+      const o = S.raporOzeti();
+      if (!o.gun && !o.hasatlar && !o.ilaclamalar && !o.tahminler) return toast('Silinecek rapor yok');
+      const bulut = window.Bulut && window.Bulut.etkin ? '\nDiğer telefonlardan da silinir.' : '';
+      if (!confirm(`Şu raporlar silinecek:\n• ${o.gun} günlük kayıt\n• ${o.hasatlar} hasat\n• ${o.ilaclamalar} ilaçlama\n• ${o.tahminler} hasat tahmini\n\nHarita, personel, sıralar, bitki sayımları ve karantinalar korunur.${bulut}\nÖnce yedek aldınız mı?`)) return;
+      if (!confirm('Emin misiniz? Bu işlem geri alınamaz.')) return;
+      S.raporlariSil();
+      toast('Raporlar silindi');
+      ciz();
     };
     $('#sifirla').onclick = () => {
       if (!confirm('TÜM veriler silinecek. Önce yedek aldınız mı?')) return;
