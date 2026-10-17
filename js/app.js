@@ -1017,8 +1017,9 @@
     const kayitGun = Object.keys(S.d.gunler).length;
     $('#ekran').innerHTML = `
       <h1 class="baslik">Ayarlar</h1>
+      <div id="bulut-panel"></div>
       <button class="panel menu-satir" id="git-personel">${ikon('personel')}<span><b>Personel & Seralar</b><small>${S.d.seralar.length} sera · ${S.d.personel.filter((p) => p.aktif).length} aktif personel</small></span>${ikon('sag')}</button>
-      ${yedekHatirlat() ? `<div class="uyari-bant">Son yedeğin üzerinden 7 günden fazla geçti. Verileriniz sadece bu telefonda; lütfen yedek alın.</div>` : ''}
+      ${yedekHatirlat() && !(window.Bulut && window.Bulut.etkin) ? `<div class="uyari-bant">Son yedeğin üzerinden 7 günden fazla geçti. Verileriniz sadece bu telefonda; lütfen yedek alın.</div>` : ''}
       <section class="panel">
         <h2>${ikon('yukle')} Excel'den içe aktar</h2>
         <p class="ince">Mevcut <b>günlük rapor</b> (SERA GÜNLÜK RAPOR …), <b>aylık personel raporu</b> (… AYI SERA 1 RAPOR) veya <b>bitki sayısı</b> (SERA 1 VE 2 BİTKİ SAYISI) dosyalarını seçin. Seralar, personel, sıra sayıları ve o günlerin kayıtları otomatik eklenir. Birden fazla dosya seçebilirsiniz.</p>
@@ -1047,8 +1048,9 @@
       </section>
       <section class="panel">
         <button class="btn tehlike genis" id="sifirla">Tüm verileri sil</button>
-        <p class="ince orta">Sera Otomasyon · v1.5</p>
+        <p class="ince orta">Sera Otomasyon · v1.6</p>
       </section>`;
+    if (window.Bulut && window.Bulut.etkin) window.Bulut.panelCiz($('#bulut-panel'));
 
     $('#git-personel').onclick = () => {
       ui.sekme = 'personel';

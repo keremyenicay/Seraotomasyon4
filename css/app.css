@@ -468,3 +468,36 @@ body[data-sekme="harita"] .leaflet-control-zoom { display: none; }
 @media (min-width: 700px) {
   .kartlar { grid-template-columns: 1fr 1fr; }
 }
+
+/* Giriş ve hesap */
+.ust-bar { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.hesap-rozet {
+  display: inline-flex; align-items: center; gap: 6px; max-width: 50%;
+  min-height: 34px; padding: 4px 12px; border-radius: 999px;
+  border: 1px solid var(--cizgi); background: var(--yuzey); color: var(--metin); font-size: 14px; font-weight: 600;
+}
+.hesap-rozet span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.nokta { display: inline-block; width: 9px; height: 9px; border-radius: 50%; background: var(--ince); flex: none; vertical-align: middle; }
+.nokta.tamam { background: var(--ana); }
+.nokta.gonderiliyor, .nokta.cevrimdisi, .nokta.bekliyor { background: var(--turuncu); }
+.nokta.hata { background: var(--kirmizi); }
+.giris {
+  position: fixed; inset: 0; z-index: 100; overflow-y: auto;
+  display: grid; place-items: center;
+  padding: calc(var(--ust) + 24px) 16px calc(var(--alt) + 24px);
+  background: var(--zemin);
+}
+.giris[hidden] { display: none; }
+body.giris-acik { overflow: hidden; }
+.giris-kutu {
+  width: 100%; max-width: 380px; text-align: center;
+  background: var(--yuzey); border: 1px solid var(--cizgi); border-radius: var(--r); padding: 24px 18px; box-shadow: var(--golge);
+}
+.giris-kutu img { border-radius: 14px; }
+.giris-kutu h1 { font-size: 24px; margin: 10px 0 4px; }
+.giris-kutu .alan-blok { text-align: left; }
+.giris-hata { color: var(--kirmizi); font-size: 14px; min-height: 1.2em; margin: 8px 0 0; }
+.kullanicilar li small { display: block; color: var(--ince); font-size: 13px; }
+.kullanicilar li.pasif { opacity: .55; }
+.giris .donen { border-color: var(--cizgi); border-top-color: var(--ana); }
+.kullanicilar li small { text-align: left; }
