@@ -669,7 +669,7 @@
       </section>
       <section class="panel">
         <h2>${ikon('hasat')} Hasat Tahmini</h2>
-        <p class="ince">Seçilen ay ve seradaki tahminler: örnek sayımlar, toplam meyve, alt 6 + üst 3/4/5 dizilimine göre kutu sayıları ve ortalama kutu (formüllü).</p>
+        <p class="ince">Sektör bazında örnek sıralardan salkım sayımı, toplam salkım, alt × üst kat kombinasyonlarına göre kutu sayıları ve ortalama kutu (formüllü), tarih × sektör özeti.</p>
         <button class="btn birincil genis" id="r-hasat">${ikon('excel')} Hasat tahmini Excel oluştur</button>
       </section>
       <section class="panel">
@@ -827,7 +827,7 @@
   }
 
   function hasatOzetPaneli(y, ay, seraId) {
-    const t = R.donemKayitlari('tahminler', y, ay, seraId);
+    const t = R.donemKayitlari('tahminler', y, ay, seraId).filter((x) => x.sektorler);
     const il = R.donemKayitlari('ilaclamalar', y, ay, seraId);
     if (!t.length && !il.length) return '';
     const hes = t.map((x) => S.tahminHesapla(x));
@@ -838,7 +838,7 @@
       <h2>${ikon('hasat')} Hasat tahmini ve ilaçlama</h2>
       <ul class="liste">
         <li><span>Tahmin sayısı</span><b>${t.length}</b></li>
-        <li><span>Toplam tahmini meyve</span><b>${meyve.toLocaleString('tr-TR')}</b></li>
+        <li><span>Toplam tahmini salkım</span><b>${meyve.toLocaleString('tr-TR')}</b></li>
         <li><span>Toplam ortalama kutu</span><b>≈ ${kutu.toLocaleString('tr-TR')}</b></li>
         ${son ? `<li><span>Son tahmin (${S.trTarih(son.tarih)} · ${esc(R.seraAdi(son.seraId))})</span><b>≈ ${(S.tahminHesapla(son).ortKutu || 0).toLocaleString('tr-TR')} kutu</b></li>` : ''}
         <li><span>İlaçlama sayısı</span><b>${il.length}</b></li>
@@ -1047,7 +1047,7 @@
       </section>
       <section class="panel">
         <button class="btn tehlike genis" id="sifirla">Tüm verileri sil</button>
-        <p class="ince orta">Sera Otomasyon · v1.4</p>
+        <p class="ince orta">Sera Otomasyon · v1.5</p>
       </section>`;
 
     $('#git-personel').onclick = () => {

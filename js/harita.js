@@ -245,7 +245,7 @@
       }).addTo(seraKat);
       poly.bindTooltip(esc(s.ad), { permanent: true, direction: 'center', className: 'sera-et' });
       const kisi = S.seraPersoneli(s.id).length;
-      const son = S.d.tahminler.filter((t) => t.seraId === s.id).slice(-1)[0];
+      const son = S.d.tahminler.filter((t) => t.seraId === s.id && t.sektorler).slice(-1)[0];
       poly.bindPopup(
         `<b>${esc(s.ad)}</b><br>${kisi} aktif personel${s.siraSayisi ? ' · ' + S.sayiYaz(s.siraSayisi) + ' sıra' : ''}
          ${bekleme.length ? `<br><span class="kirmizi">İlaç bekleme: ${bekleme.map((il) => esc(il.ilac) + ' → ' + S.trTarih(S.uygunTarih(il))).join(', ')}</span>` : ''}
