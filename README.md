@@ -36,7 +36,10 @@ iPhone'da çalışan, internetsiz de açılan sera iş takip uygulaması. Günl�
   - İlaç bekleme süresi devam eden seralar kırmızı çizilir. Bakılan uydu görüntüleri önbelleğe alınır, sahada internetsiz de açılır.
 - **Excel'den içe aktarma:** Mevcut günlük rapor, aylık rapor ve bitki sayısı dosyalarınızı seçtiğinizde seralar, personel, sıra sayıları ve geçmiş kayıtlar otomatik yüklenir.
 - **Aylık özet:** Çalışılan gün, devamsızlık, tamamlanan ve kalan sıra, iş türlerine göre dağılım.
-- **Çevrimdışı çalışır**, koyu modu destekler. Veriler yalnızca telefonda saklanır. JSON yedek alınabilir; 7 gün yedek alınmazsa uygulama hatırlatır.
+- **Kullanıcı girişi ve bulut senkronu (Supabase):** Uygulama açılınca kullanıcı adı ve şifre sorulur; oturum telefonda kalır. Üst çubukta giren kişinin adı ve senkron durumu (yeşil: tamam, turuncu: bekliyor/çevrimdışı, kırmızı: hata) görünür. Veriler önce telefona kaydedilir, internet gelince buluta gönderilir; başka telefonda yapılan değişiklik anında gelir. Birleştirme bölüm ve gün bazındadır, iki kişi farklı günleri ya da bölümleri girerse birbirinin kaydını ezmez.
+  - İlk açılışta **yönetici hesabı** oluşturulur. Diğer hesapları yönetici **Ayarlar › Hesap ve senkron › Kullanıcılar** bölümünden ekler, şifresini değiştirir ya da devre dışı bırakır. Listede herkesin son görülme zamanı yazar.
+  - Bağlantı ayarı `js/ayar.js` içindedir; boş bırakılırsa uygulama eskisi gibi girişsiz ve yalnızca telefonda çalışır. Veritabanı kurulumu: `supabase/migrations/001_giris_senkron.sql`.
+- **Çevrimdışı çalışır**, koyu modu destekler. JSON yedek alınabilir.
 
 ## iPhone'a kurulum
 

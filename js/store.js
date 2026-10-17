@@ -88,6 +88,7 @@
   }
 
   let kayitZamanlayici = null;
+  const dinleyiciler = [];
   function kaydet(hemen) {
     clearTimeout(kayitZamanlayici);
     const yaz = () => {
@@ -96,6 +97,7 @@
       } catch (e) {
         alert('Veri kaydedilemedi! Depolama dolu olabilir. Lütfen Ayarlar > Yedek Al yapın.\n' + e.message);
       }
+      dinleyiciler.forEach((f) => f());
     };
     if (hemen) yaz();
     else kayitZamanlayici = setTimeout(yaz, 250);
@@ -600,6 +602,41 @@
     kaydet(true);
   }
 
+  // ---- Bulut senkronu için parçalar ----
+  // Her bölüm ayrı parça, günlük kayıtlar gün başına ayrı parça; böylece iki telefon
+  // farklı günleri/bölümleri girdiğinde birbirinin kaydını ezmez.
+  // ayarlar'dan yalnızca ortak olanlar paylaşılır (son yedek, kurulum tarihi cihaza özgü).
+  const ORTAK_AYARLAR = ['pazarTatil'];
+  function parcalar() {
+    const p = {};
+    Object.keys(durum).forEach((k) => {
+      if (k === 'gunler' || k === 'ayarlar') return;
+      p['k:' + k] = durum[k];
+    });
+    const a = {};
+    ORTAK_AYARLAR.forEach((k) => (a[k] = durum.ayarlar[k]));
+    p['k:ayarlar'] = a;
+    Object.keys(durum.gunler).forEach((t) => (p['gun:' + t] = durum.gunler[t]));
+    return p;
+  }
+  function parcaUygula(anahtar, veri) {
+    if (anahtar.startsWith('gun:')) {
+      const t = anahtar.slice(4);
+      if (veri === null || veri === undefined) delete durum.gunler[t];
+      else durum.gunler[t] = veri;
+    } else if (anahtar === 'k:ayarlar') {
+      if (veri) ORTAK_AYARLAR.forEach((k) => k in veri && (durum.ayarlar[k] = veri[k]));
+    } else if (anahtar.startsWith('k:')) {
+      const k = anahtar.slice(2);
+      if (veri === null || veri === undefined) delete durum[k];
+      else durum[k] = veri;
+    }
+  }
+  function parcalarBitti() {
+    durum = normalize(durum);
+    kaydet(true);
+  }
+
   if (navigator.storage && navigator.storage.persist) {
     navigator.storage.persist().catch(() => {});
   }
@@ -680,5 +717,9 @@
     disaAktarJSON,
     iceAktarJSON,
     sifirla,
+    parcalar,
+    parcaUygula,
+    parcalarBitti,
+    kayitDinle: (f) => dinleyiciler.push(f),
   };
 })();
