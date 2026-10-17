@@ -785,6 +785,12 @@
           <h1 class="baslik">${esc(sera.ad || '')} · Sektör ${esc(sk.no)}</h1>
           ${sayimBandi()}
           <p class="ince">${pcs.map((p) => `${p.harf}: ${p.n} gutter`).join(' · ')}${sy ? ` · ${sayi(toplam)} bitki ${once ? farkYaz(toplam - onceToplam) : ''} <small>(${S.trTarih(sy.tarih)} sayımı)</small>` : ''}${S.karantinaListesi(sk.seraId).filter((k) => sk.harfler.includes(k.harf)).length ? ` · <span class="kirmizi">⚠ ${S.karantinaListesi(sk.seraId).filter((k) => sk.harfler.includes(k.harf)).length} karantina</span>` : ''}</p>
+          ${(() => {
+            const t = S.d.tahminler.filter((x) => x.sektorler && x.sektorler[sk.id]).slice(-1)[0];
+            if (!t) return '';
+            const x = S.tahminHesapla(t).sektorler.find((y) => y.skId === sk.id);
+            return x ? `<p class="ince kucuk-yazi">Son hasat tahmini ${S.trTarih(t.tarih)}: ort ${S.sayiYaz(x.ort)} salkım/sıra · ${sayi(x.salkim)} salkım · ≈ <b>${sayi(x.ortKutu)}</b> kutu</p>` : '';
+          })()}
           <div class="arac-cubugu">
             <button class="btn kucuk ${d.aktif ? 'birincil' : ''}" data-sm="duzenle">${ikon('kalem')} ${d.aktif ? 'Düzenlemeyi bitir' : 'Düzenle'}</button>
             <button class="btn kucuk" data-sm="sektor-ayar">⚙ Sektör ayarı</button>

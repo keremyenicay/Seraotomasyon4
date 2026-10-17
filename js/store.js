@@ -292,21 +292,50 @@
       (il) => (sayi(il.bekleme) || 0) > 0 && (!il.seraId || !seraId || il.seraId === seraId) && il.tarih <= t && uygunTarih(il) > t
     );
   }
-  // ---- Hasat tahmini: kutu alt kat 6, üst kat 3/4/5 ----
+  // ---- Hasat tahmini: sektör başına 2 sıradan salkım sayımı; kutu = alt kat + üst kat salkım ----
+  const ALT_KATLAR = [4, 5, 6];
   const UST_KATLAR = [3, 4, 5];
+  function sektorSiraSayisi(sk) {
+    return sk ? sk.harfler.reduce((t, h) => t + gutterSayisi(sk.seraId, h), 0) : 0;
+  }
+  // Seçili alt × üst kombinasyonları (alt büyükten küçüğe, üst küçükten büyüğe)
+  function kombinasyonlar(t) {
+    const altlar = (t.altKatlar && t.altKatlar.length ? t.altKatlar : [6]).map(sayi).filter((n) => n > 0).sort((a, b) => b - a);
+    const ustler = (t.ustKatlar && t.ustKatlar.length ? t.ustKatlar : UST_KATLAR).map(sayi).filter((n) => n > 0).sort((a, b) => a - b);
+    const l = [];
+    altlar.forEach((alt) => ustler.forEach((ust) => l.push({ alt, ust, adet: alt + ust })));
+    return { altlar, ustler, l };
+  }
   function tahminHesapla(t) {
-    const sayimlar = (t.sayimlar || []).map(sayi).filter((n) => n !== null && n >= 0);
-    const ort = sayimlar.length ? sayimlar.reduce((a, b) => a + b, 0) / sayimlar.length : null;
-    const sira = sayi(t.siraSayisi) || 0;
-    const carpan = t.birim === 'sira' ? sira : sayi(t.toplamBitki) || sira * (sayi(t.bitkiSira) || 0);
-    const fire = Math.min(100, Math.max(0, sayi(t.fire) || 0));
-    const toplam = ort !== null && carpan ? Math.round(ort * carpan * (1 - fire / 100)) : null;
-    const alt = sayi(t.altKat) || 6;
-    const ustler = (t.ustKatlar && t.ustKatlar.length ? t.ustKatlar : UST_KATLAR).map(sayi).filter((n) => n > 0);
-    const dizilimler = ustler.map((u) => ({ ust: u, adet: alt + u, kutu: toplam !== null ? Math.ceil(toplam / (alt + u)) : null }));
-    const kutular = dizilimler.map((x) => x.kutu).filter((n) => n !== null);
-    const ortKutu = kutular.length ? Math.round(kutular.reduce((a, b) => a + b, 0) / kutular.length) : null;
-    return { ort: ort !== null ? Math.round(ort * 100) / 100 : null, sayimSayisi: sayimlar.length, carpan, toplam, alt, dizilimler, ortKutu };
+    const fire = Math.min(100, Math.max(0, sayi(t && t.fire) || 0));
+    const { altlar, ustler, l: komb } = kombinasyonlar(t || {});
+    const sektorler = [];
+    Object.entries((t && t.sektorler) || {}).forEach(([skId, v]) => {
+      const sk = durum.sektorler.find((x) => x.id === skId);
+      const sayimlar = (v.sayimlar || []).map(sayi).filter((n) => n !== null && n >= 0);
+      if (!sayimlar.length) return;
+      const sira = sayi(v.sira) || sektorSiraSayisi(sk);
+      const ort = sayimlar.reduce((a, b) => a + b, 0) / sayimlar.length;
+      const salkim = Math.round(ort * sira * (1 - fire / 100));
+      const kutular = komb.map((k) => Math.ceil(salkim / k.adet));
+      sektorler.push({
+        skId,
+        no: sk ? sk.no : '?',
+        sira,
+        sayimlar,
+        ort: Math.round(ort * 100) / 100,
+        salkim,
+        kutular,
+        ortKutu: kutular.length ? Math.round(kutular.reduce((a, b) => a + b, 0) / kutular.length) : null,
+      });
+    });
+    // Sektörleri şema sırasına diz
+    const sira = durum.sektorler.map((x) => x.id);
+    sektorler.sort((a, b) => sira.indexOf(a.skId) - sira.indexOf(b.skId));
+    const toplam = sektorler.length ? sektorler.reduce((a, x) => a + x.salkim, 0) : null;
+    const kombToplam = komb.map((k, i) => Object.assign({}, k, { kutu: sektorler.reduce((a, x) => a + x.kutular[i], 0) }));
+    const ortKutu = sektorler.length && kombToplam.length ? Math.round(kombToplam.reduce((a, k) => a + k.kutu, 0) / kombToplam.length) : null;
+    return { sektorler, toplam, kombinasyonlar: kombToplam, altlar, ustler, ortKutu, fire };
   }
   // Serada personelin toplam sıra sayısı (tahmin için öneri)
   function seraSiraToplami(seraId) {
@@ -618,7 +647,9 @@
     uygunTarih,
     beklemeUyarilari,
     ilacKatalogu,
+    ALT_KATLAR,
     UST_KATLAR,
+    sektorSiraSayisi,
     tahminHesapla,
     SEKTOR_HARF,
     sektorleriHazirla,

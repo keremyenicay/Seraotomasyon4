@@ -582,78 +582,111 @@
   async function hasatTahminRaporu(yil, ay, seraId) {
     const wb = new ExcelJS.Workbook();
     wb.creator = 'Sera Otomasyon';
-    const kayitlar = donemKayitlari('tahminler', yil, ay, seraId);
+    const kayitlar = donemKayitlari('tahminler', yil, ay, seraId).filter((t) => t.sektorler && Object.keys(t.sektorler).length);
     const ws = wb.addWorksheet('HASAT TAHMİNİ', {
       pageSetup: { paperSize: 9, orientation: 'landscape', fitToPage: true, fitToWidth: 1, fitToHeight: 0 },
     });
-    const hes = kayitlar.map((t) => ({ t, h: S.tahminHesapla(t) }));
-    const ustler = Array.from(new Set([].concat(...hes.map((x) => x.h.dizilimler.map((d) => d.ust))).concat(kayitlar.length ? [] : S.UST_KATLAR))).sort((a, b) => a - b);
-    const alt = hes.length ? hes[0].h.alt : 6;
-    const ek = (n) => (n === 9 || n === 10 || n === 6 ? (n === 6 ? 'LI' : 'LU') : n === 7 || n === 8 || n === 11 || n === 12 ? 'Lİ' : 'LIK');
-    const bas = ['TARİH', 'SERA', 'SAYIM BİRİMİ', 'ÖRNEK SAYIMLAR', 'ORT. MEYVE', 'SIRA SAYISI', 'BİTKİ / SIRA', 'FİRE %', 'TOPLAM MEYVE (TAHMİNİ)']
-      .concat(ustler.map((u) => `ALT ${alt} + ÜST ${u} = ${alt + u}'${ek(alt + u)} KUTU`))
-      .concat(['ORTALAMA KUTU', 'NOT']);
-    tabloBasligi(ws, `HASAT TAHMİNİ – ${S.AYLAR[ay]} ${yil} – ${seraAdi(seraId)}`, bas, [12, 12, 10, 24, 10, 9, 9, 8, 14].concat(ustler.map(() => 14), [13, 24]));
+    const hesaplar = kayitlar.map((t) => ({ t, h: S.tahminHesapla(t) }));
+    const maxSira = Math.max(2, ...hesaplar.map(({ h }) => Math.max(0, ...h.sektorler.map((x) => x.sayimlar.length))));
+    const ek = (n) => ({ 6: 'LI', 9: 'LU', 10: 'LU', 7: 'Lİ', 8: 'Lİ', 11: 'Lİ', 12: 'Lİ' }[n] || 'LIK');
     const L = (n) => ws.getColumn(n).letter;
-    const kutuIlk = 10;
-    const ortKol = kutuIlk + ustler.length;
-    hes.forEach(({ t, h }, i) => {
-      const r = 3 + i;
-      const row = ws.getRow(r);
-      tarihHucre(row.getCell(1), t.tarih);
-      row.getCell(2).value = seraAdi(t.seraId);
-      row.getCell(3).value = t.birim === 'sira' ? 'SIRA' : t.toplamBitki ? `BİTKİ (sayım: ${Number(t.toplamBitki).toLocaleString('tr-TR')})` : 'BİTKİ';
-      row.getCell(4).value = (t.sayimlar || []).map((n) => S.sayiYaz(n)).join(' - ');
-      row.getCell(5).value = h.ort;
-      row.getCell(6).value = t.toplamBitki ? null : S.sayi(t.siraSayisi);
-      row.getCell(7).value = t.birim === 'sira' || t.toplamBitki ? null : S.sayi(t.bitkiSira);
-      row.getCell(8).value = S.sayi(t.fire) || 0;
-      row.getCell(9).value = {
-        formula: t.toplamBitki
-          ? `ROUND(E${r}*${Number(t.toplamBitki)}*(1-H${r}/100),0)`
-          : t.birim === 'sira'
-          ? `ROUND(E${r}*F${r}*(1-H${r}/100),0)`
-          : `ROUND(E${r}*F${r}*G${r}*(1-H${r}/100),0)`,
-        result: h.toplam,
-      };
-      const secili = [];
-      ustler.forEach((u, j) => {
-        const c = row.getCell(kutuIlk + j);
-        const d = h.dizilimler.find((x) => x.ust === u);
-        const adet = h.alt + u;
-        c.value = { formula: `ROUNDUP(I${r}/${adet},0)`, result: h.toplam !== null ? Math.ceil(h.toplam / adet) : 0 };
-        if (d) secili.push(L(kutuIlk + j) + r);
-        else c.font = { color: { argb: 'FF999999' } };
+    const baslik = `HASAT TAHMİNİ – ${S.AYLAR[ay]} ${yil} – ${seraAdi(seraId)}`;
+    // Sütunlar: A SEKTÖR, B SIRA, C.. sayımlar, ORT, FİRE, TOPLAM SALKIM, kombinasyonlar..., ORTALAMA KUTU
+    const cSay = 3;
+    const cOrt = cSay + maxSira;
+    const cFire = cOrt + 1;
+    const cTop = cFire + 1;
+    const cKomb = cTop + 1;
+    [14, 10].concat(new Array(maxSira).fill(10), [12, 8, 14]).forEach((w, i) => (ws.getColumn(i + 1).width = w));
+    ws.mergeCells(1, 1, 1, 12);
+    ws.getCell(1, 1).value = baslik;
+    ws.getCell(1, 1).font = { bold: true, size: 14 };
+    let r = 3;
+    const ozet = []; // tarih × sektör
+    hesaplar.forEach(({ t, h }) => {
+      const komb = h.kombinasyonlar;
+      const cOrtK = cKomb + komb.length;
+      for (let i = 0; i < komb.length; i++) ws.getColumn(cKomb + i).width = Math.max(ws.getColumn(cKomb + i).width || 0, 13);
+      ws.getColumn(cOrtK).width = Math.max(ws.getColumn(cOrtK).width || 0, 13);
+      // Blok başlığı
+      ws.mergeCells(r, 1, r, cOrtK);
+      const bb = ws.getCell(r, 1);
+      bb.value = `${S.trTarih(t.tarih)} · ${seraAdi(t.seraId)}${t.not ? ' · ' + t.not : ''}`;
+      bb.font = { bold: true, size: 12 };
+      bb.fill = dolgu(GRI);
+      bb.border = KENAR;
+      r++;
+      const bas = ['SEKTÖR', 'SIRA SAYISI']
+        .concat(Array.from({ length: maxSira }, (_, i) => `${i + 1}. SIRA (SALKIM)`), ['ORT. SALKIM / SIRA', 'FİRE %', 'TOPLAM SALKIM'])
+        .concat(komb.map((k) => `ALT ${k.alt} + ÜST ${k.ust} = ${k.adet}'${ek(k.adet)} KUTU`), ['ORTALAMA KUTU']);
+      bas.forEach((v, i) => {
+        const c = ws.getCell(r, i + 1);
+        c.value = v;
+        c.font = { bold: true, size: 10 };
+        c.alignment = { wrapText: true, horizontal: 'center', vertical: 'middle' };
+        c.border = KENAR;
       });
-      row.getCell(ortKol).value = secili.length ? { formula: `ROUND(AVERAGE(${secili.join(',')}),0)`, result: h.ortKutu } : h.ortKutu;
-      row.getCell(ortKol).font = { bold: true };
-      row.getCell(ortKol + 1).value = t.not || null;
-      satirKenar(row, bas.length);
-      for (let c = 1; c <= ortKol; c++) if (c !== 4) row.getCell(c).alignment = { horizontal: 'center', vertical: 'middle' };
-    });
-    const r = 3 + hes.length;
-    const top = ws.getRow(r);
-    top.getCell(1).value = 'TOPLAM';
-    ws.mergeCells(r, 1, r, 8);
-    const son = Math.max(3, r - 1);
-    [9].concat(ustler.map((_, j) => kutuIlk + j), [ortKol]).forEach((c) => {
-      const harf = L(c);
-      let toplam = 0;
-      for (let i = 3; i < r; i++) {
-        const v = ws.getCell(i, c).value;
-        toplam += (v && typeof v === 'object' ? v.result : v) || 0;
+      ws.getRow(r).height = 42;
+      r++;
+      const ilk = r;
+      h.sektorler.forEach((x) => {
+        const row = ws.getRow(r);
+        row.getCell(1).value = 'SEKTÖR ' + x.no;
+        row.getCell(2).value = x.sira;
+        for (let i = 0; i < maxSira; i++) row.getCell(cSay + i).value = x.sayimlar[i] !== undefined ? x.sayimlar[i] : null;
+        row.getCell(cOrt).value = { formula: `ROUND(AVERAGE(${L(cSay)}${r}:${L(cSay + maxSira - 1)}${r}),2)`, result: x.ort };
+        row.getCell(cFire).value = h.fire || 0;
+        row.getCell(cTop).value = { formula: `ROUND(${L(cOrt)}${r}*B${r}*(1-${L(cFire)}${r}/100),0)`, result: x.salkim };
+        komb.forEach((k, i) => (row.getCell(cKomb + i).value = { formula: `ROUNDUP(${L(cTop)}${r}/${k.adet},0)`, result: x.kutular[i] }));
+        row.getCell(cOrtK).value = { formula: `ROUND(AVERAGE(${L(cKomb)}${r}:${L(cOrtK - 1)}${r}),0)`, result: x.ortKutu };
+        row.getCell(cOrtK).font = { bold: true };
+        satirKenar(row, bas.length);
+        for (let c = 2; c <= bas.length; c++) row.getCell(c).alignment = { horizontal: 'center', vertical: 'middle' };
+        ozet.push({ tarih: t.tarih, sera: seraAdi(t.seraId), no: x.no, kutu: x.ortKutu });
+        r++;
+      });
+      const son = r - 1;
+      const top = ws.getRow(r);
+      top.getCell(1).value = 'TOPLAM';
+      top.getCell(2).value = { formula: `SUM(B${ilk}:B${son})`, result: h.sektorler.reduce((a, x) => a + x.sira, 0) };
+      top.getCell(cTop).value = { formula: `SUM(${L(cTop)}${ilk}:${L(cTop)}${son})`, result: h.toplam };
+      komb.forEach((k, i) => (top.getCell(cKomb + i).value = { formula: `SUM(${L(cKomb + i)}${ilk}:${L(cKomb + i)}${son})`, result: k.kutu }));
+      top.getCell(cOrtK).value = { formula: `ROUND(AVERAGE(${L(cKomb)}${r}:${L(cOrtK - 1)}${r}),0)`, result: h.ortKutu };
+      for (let c = 1; c <= bas.length; c++) {
+        const cell = top.getCell(c);
+        cell.font = { bold: true };
+        cell.fill = dolgu(MAVI);
+        cell.border = KENAR;
+        if (c > 1) cell.alignment = { horizontal: 'center' };
       }
-      top.getCell(c).value = { formula: `SUM(${harf}3:${harf}${son})`, result: toplam };
+      r += 3;
     });
-    for (let c = 1; c <= bas.length; c++) {
-      const cell = top.getCell(c);
-      cell.font = { bold: true };
-      cell.fill = dolgu(MAVI);
-      cell.border = KENAR;
-      cell.alignment = { horizontal: 'center' };
-    }
-    ws.getCell(r + 2, 1).value = `Kutu dizilimi: alt kata ${alt}, üst kata ${ustler.join(' / ')} domates. Kutu sayısı = toplam meyve ÷ kutu başı adet (yukarı yuvarlanır). Ortalama kutu, seçilen dizilimlerin ortalamasıdır.`;
-    ws.getCell(r + 2, 1).font = { italic: true, size: 9, color: { argb: 'FF666666' } };
+    if (!hesaplar.length) ws.getCell(3, 1).value = 'Bu dönemde hasat tahmini yok.';
+    ws.getCell(r, 1).value = 'Her sektörde örnek sıralarda hasada hazır salkım sayılır; ortalama × sıra sayısı = toplam salkım. Kutu başı salkım = alt kat + üst kat; kutu sayısı yukarı yuvarlanır.';
+    ws.getCell(r, 1).font = { italic: true, size: 9, color: { argb: 'FF666666' } };
+
+    // ÖZET: tarih × sektör (ortalama kutu)
+    const wo = wb.addWorksheet('ÖZET');
+    const tarihler = Array.from(new Set(ozet.map((x) => x.tarih + '|' + x.sera)));
+    const sekler = [];
+    S.d.sektorler.forEach((sk) => ozet.some((x) => x.no === sk.no && x.sera === seraAdi(sk.seraId)) && sekler.push({ no: sk.no, sera: seraAdi(sk.seraId) }));
+    const ob = ['TARİH', 'SERA'].concat(sekler.map((x) => 'SEKTÖR ' + x.no), ['TOPLAM KUTU']);
+    tabloBasligi(wo, `HASAT TAHMİNİ ÖZETİ (ORTALAMA KUTU) – ${S.AYLAR[ay]} ${yil}`, ob, [12, 10].concat(sekler.map(() => 11), [13]));
+    tarihler.forEach((k, i) => {
+      const [t, sera] = k.split('|');
+      const row = wo.getRow(3 + i);
+      tarihHucre(row.getCell(1), t);
+      row.getCell(2).value = sera;
+      sekler.forEach((sk, j) => {
+        const x = ozet.find((o) => o.tarih === t && o.sera === sera && o.no === sk.no && sk.sera === sera);
+        row.getCell(3 + j).value = x ? x.kutu : null;
+      });
+      const lc = wo.getColumn(2 + sekler.length).letter;
+      row.getCell(3 + sekler.length).value = { formula: `SUM(C${3 + i}:${lc}${3 + i})` };
+      row.getCell(3 + sekler.length).font = { bold: true };
+      satirKenar(row, ob.length);
+      for (let c = 1; c <= ob.length; c++) row.getCell(c).alignment = { horizontal: 'center' };
+    });
     return wb;
   }
 
