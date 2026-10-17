@@ -97,9 +97,10 @@ $$;
 revoke all on function public._kullanici_olustur(text, text, text, text) from public, anon, authenticated;
 
 -- Kurulum yapılmış mı? (giriş ekranı ilk yönetici formunu göstermek için)
+-- Yönetici kendini kapatamadığı için kurulumdan sonra en az bir aktif hesap hep kalır.
 create or replace function public.kurulum_var()
 returns boolean language sql stable security definer set search_path = '' as $$
-  select exists (select 1 from public.profiller);
+  select exists (select 1 from public.profiller where aktif);
 $$;
 
 -- Hiç kullanıcı yokken ilk yönetici hesabını açar
@@ -107,7 +108,7 @@ create or replace function public.ilk_yonetici(p_kullanici text, p_sifre text, p
 returns uuid language plpgsql security definer set search_path = '' as $$
 begin
   lock table public.profiller in exclusive mode;
-  if exists (select 1 from public.profiller) then
+  if exists (select 1 from public.profiller where aktif) then
     raise exception 'Kurulum zaten yapılmış';
   end if;
   return public._kullanici_olustur(p_kullanici, p_sifre, p_ad, 'yonetici');

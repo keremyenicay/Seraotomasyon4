@@ -201,6 +201,7 @@
 
   const senkronla = () =>
     sirayla(async () => {
+      if (!(await oturumTazele())) return;
       await cek();
       await gonder();
     });
@@ -267,6 +268,24 @@
   setInterval(gorundum, 5 * 60 * 1000);
 
   // ---------- Oturum ----------
+  const OTURUM_KEY = 'seraotomasyon.oturum';
+  const kayitliOturum = () => oku(OTURUM_KEY, null);
+
+  // Süresi dolmuş oturum çevrimdışıyken yenilenemez ama silinmez; internet gelince burada yenilenir
+  async function oturumTazele() {
+    if (!oturum || !navigator.onLine) return !!oturum;
+    const { data } = await sb.auth.getSession();
+    if (data && data.session) {
+      oturum = data.session;
+      return true;
+    }
+    if (!kayitliOturum()) {
+      disari('Oturum sona erdi, tekrar giriş yapın.');
+      return false;
+    }
+    return true;
+  }
+
   async function profilGetir(kullanici) {
     const { data, error } = await sb.from('profiller').select('id,kullanici_adi,ad,rol,aktif').eq('id', kullanici.id).maybeSingle();
     if (error) throw error;
@@ -306,9 +325,16 @@
   }
 
   async function basla() {
-    const { data } = await sb.auth.getSession();
+    // Süresi dolmuş oturumu yenilemeye çalışırken ağ yoksa getSession uzun süre bekleyebilir
+    const bekle = (ms) => new Promise((coz) => setTimeout(() => coz({ data: null }), ms));
+    const { data } = navigator.onLine ? await Promise.race([sb.auth.getSession(), bekle(4000)]) : { data: null };
     const s = data && data.session;
-    if (!s) return girisCiz();
+    if (!s) {
+      // Oturum duruyor ama yenilenemedi (internet yok): telefonda çalışmaya devam et
+      const k = kayitliOturum();
+      if (k && k.refresh_token && profil) return iceri(k);
+      return girisCiz();
+    }
     if (navigator.onLine) {
       try {
         await profilDogrula(s.user);
@@ -390,7 +416,7 @@
       return;
     }
     r.hidden = false;
-    r.innerHTML = `<i class="nokta ${durum}" title="${esc(DURUM_ADI[durum] || '')}"></i><span>${esc(profil.ad)}</span>`;
+    r.innerHTML = `<i class="senkron-nokta ${durum}" title="${esc(DURUM_ADI[durum] || '')}"></i><span>${esc(profil.ad)}</span>`;
   }
   $('#hesap-rozet').onclick = () => {
     A.ui.sekme = 'ayarlar';
@@ -402,7 +428,7 @@
   function durumHtml() {
     const son = sd.sonSenkron ? new Date(sd.sonSenkron).toLocaleString('tr-TR') : 'henüz yok';
     const b = oturum ? bekleyenler().length : 0;
-    return `<i class="nokta ${durum}"></i> ${esc(DURUM_ADI[durum] || '')}${b ? ` · ${b} değişiklik gönderilmeyi bekliyor` : ''}<br>Son senkron: ${esc(son)}${hataMetni ? `<br><span class="kirmizi">${esc(hataMetni)}</span>` : ''}`;
+    return `<i class="senkron-nokta ${durum}"></i> ${esc(DURUM_ADI[durum] || '')}${b ? ` · ${b} değişiklik gönderilmeyi bekliyor` : ''}<br>Son senkron: ${esc(son)}${hataMetni ? `<br><span class="kirmizi">${esc(hataMetni)}</span>` : ''}`;
   }
 
   function panelCiz(el) {
@@ -447,7 +473,7 @@
       `<ul class="liste kullanicilar">${data
         .map(
           (u) => `<li class="${u.aktif ? '' : 'pasif'}">
-            <span><b>${esc(u.ad)}</b>${u.id === profil.id ? ' <small>(siz)</small>' : ''}<small>@${esc(u.kullanici_adi)} · ${u.rol === 'yonetici' ? 'Yönetici' : 'Personel'}${u.aktif ? '' : ' · devre dışı'} · ${gorulmeMetni(u.son_gorulme)}</small></span>
+            <span><b>${esc(u.ad)}</b>${u.id === profil.id ? ' (siz)' : ''}<small>@${esc(u.kullanici_adi)} · ${u.rol === 'yonetici' ? 'Yönetici' : 'Personel'}${u.aktif ? '' : ' · devre dışı'} · ${gorulmeMetni(u.son_gorulme)}</small></span>
             ${yon ? `<button class="btn kucuk" data-duzenle="${u.id}">Düzenle</button>` : ''}
           </li>`
         )

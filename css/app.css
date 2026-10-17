@@ -477,10 +477,10 @@ body[data-sekme="harita"] .leaflet-control-zoom { display: none; }
   border: 1px solid var(--cizgi); background: var(--yuzey); color: var(--metin); font-size: 14px; font-weight: 600;
 }
 .hesap-rozet span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.nokta { display: inline-block; width: 9px; height: 9px; border-radius: 50%; background: var(--ince); flex: none; vertical-align: middle; }
-.nokta.tamam { background: var(--ana); }
-.nokta.gonderiliyor, .nokta.cevrimdisi, .nokta.bekliyor { background: var(--turuncu); }
-.nokta.hata { background: var(--kirmizi); }
+.senkron-nokta { display: inline-block; width: 9px; height: 9px; border-radius: 50%; background: var(--ince); flex: none; vertical-align: middle; }
+.senkron-nokta.tamam { background: var(--ana); }
+.senkron-nokta.gonderiliyor, .senkron-nokta.cevrimdisi, .senkron-nokta.bekliyor { background: var(--turuncu); }
+.senkron-nokta.hata { background: var(--kirmizi); }
 .giris {
   position: fixed; inset: 0; z-index: 100; overflow-y: auto;
   display: grid; place-items: center;
