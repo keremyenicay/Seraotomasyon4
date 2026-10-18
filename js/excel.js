@@ -727,7 +727,7 @@
     ['dripEc', (o) => (o === 'ara' ? 'Ara ölçümdeki drip EC:' : 'Gün sonundaki drip EC:'), '0.00'],
     ['dripPh', (o) => (o === 'ara' ? 'Ara ölçümdeki drip pH:' : 'Gün sonundaki drip pH:'), '0.00'],
   ];
-  function drenajSayfasi(wb, tarih, ad) {
+  function drenajSayfasi(wb, tarih, ad, turler = ['ara', 'gunsonu']) {
     const ws = wb.addWorksheet(ad, { pageSetup: { paperSize: 9, orientation: 'landscape', fitToPage: true, fitToWidth: 1, fitToHeight: 1 } });
     const vs = S.d.ayarlar.vanaSayisi || 10;
     const ortKol = vs + 2;
@@ -746,7 +746,7 @@
     ws.getCell(1, ortKol).value = 'ORTALAMA';
     ws.getCell(1, ortKol).font = { bold: true, size: 11 };
     let r = 2;
-    ['ara', 'gunsonu'].forEach((tur) => {
+    turler.forEach((tur) => {
       const k = S.drenajBul(tarih, tur);
       ws.mergeCells(r, 1, r, ortKol);
       const bb = ws.getCell(r, 1);
@@ -787,10 +787,11 @@
     });
     return ws;
   }
-  async function drenajRaporu(tarih) {
+  // Günlük dosya tek ölçümü içerir (ara ölçüm ve gün sonu ekibe ayrı gönderilir); birleşik görünüm sadece aylıkta
+  async function drenajRaporu(tarih, tur) {
     const wb = new ExcelJS.Workbook();
     wb.creator = 'Sera Otomasyon';
-    drenajSayfasi(wb, tarih, 'Sayfa1');
+    drenajSayfasi(wb, tarih, 'Sayfa1', tur ? [tur] : undefined);
     return wb;
   }
   async function drenajAylik(yil, ay) {
@@ -1101,7 +1102,71 @@
     return wb;
   }
 
+  // ---------- HASAT / YAPRAK PLANI ----------
+  async function planRaporu(p) {
+    const s = p.sonuc;
+    const isAd = p.is === 'YAPRAK' ? 'YAPRAK' : 'HASAT';
+    const wb = new ExcelJS.Workbook();
+    wb.creator = 'Sera Otomasyon';
+    const ws = wb.addWorksheet('PLAN', { pageSetup: { paperSize: 9, orientation: 'landscape', fitToPage: true, fitToWidth: 1, fitToHeight: 0 } });
+    const b1 = ['GELMEYEN', 'SERA', 'SIRA', 'SIRALARI', 'YERİNE GİDEN', 'SIRA', 'GİDECEĞİ SIRALAR'];
+    tabloBasligi(ws, `${isAd} PLANI – ${S.trTarih(p.tarih)} ${S.trUpper(S.GUNLER[S.strTarih(p.tarih).getDay()])}`, b1, [22, 9, 7, 34, 22, 7, 40]);
+    let r = 3;
+    s.gelmeyenler.forEach((g) => {
+      const ilk = r;
+      (g.dagilim.length ? g.dagilim : [{ ad: '', sira: null, yer: '' }]).forEach((d) => {
+        const row = ws.getRow(r);
+        [g.ad, seraAdi(g.seraId), g.sira, g.yer, d.ad, d.sira, d.yer].forEach((v, j) => (row.getCell(j + 1).value = v));
+        satirKenar(row, b1.length);
+        r++;
+      });
+      if (r - 1 > ilk) [1, 2, 3, 4].forEach((c) => ws.mergeCells(ilk, c, r - 1, c));
+      ws.getCell(ilk, 1).font = { bold: true };
+    });
+    if (!s.gelmeyenler.length) ws.getCell(r++, 1).value = 'Gelmeyecek yok – herkes kendi yerinde.';
+    const top = ws.getRow(r);
+    top.getCell(1).value = 'TOPLAM EKSİK';
+    top.getCell(3).value = r > 3 ? { formula: `SUM(C3:C${r - 1})`, result: s.eksikSira } : 0;
+    top.getCell(6).value = r > 3 ? { formula: `SUM(F3:F${r - 1})`, result: s.eksikSira - s.karsilanmayan } : 0;
+    top.font = { bold: true };
+    satirKenar(top, b1.length);
+    r += 2;
+    // Kişi başı görev listesi
+    const b2 = ['KİŞİ', 'GÖREV', 'EK SIRA', 'ÖNCE (GELMEYENİN SIRALARI)', 'KİMİN YERİNE', 'SONRA', 'NOT'];
+    b2.forEach((v, i) => {
+      const c = ws.getCell(r, i + 1);
+      c.value = v;
+      c.font = { bold: true, size: 10 };
+      c.fill = dolgu(GRI);
+      c.border = KENAR;
+      c.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
+    });
+    r++;
+    const gorev = { normal: 'Sıra sahibi', joker: 'Joker', yatirma: 'Yatırmacı' };
+    s.yardimcilar
+      .filter((h) => h.ek > 0)
+      .forEach((h) => {
+        const row = ws.getRow(r++);
+        const not = [h.karantina ? 'En son karantina: ' + h.karantina : '', h.tip === 'yatirma' ? `Yatırma ${S.sayiYaz(h.saat)} saat, yardım ≈${S.sayiYaz(h.yardimSaat)} saat` : ''].filter(Boolean).join(' · ');
+        [h.ad, gorev[h.tip], h.ek, h.yer, h.kimin.join(', '), h.tip === 'normal' ? 'Kendi yeri: ' + h.kendi : '', not || null].forEach((v, j) => (row.getCell(j + 1).value = v));
+        satirKenar(row, b2.length);
+      });
+    const bos = s.yardimcilar.filter((h) => h.ek === 0 && h.tip === 'normal');
+    if (bos.length) {
+      ws.mergeCells(r, 1, r, b2.length);
+      ws.getCell(r, 1).value = 'Sadece kendi yerinde: ' + bos.map((h) => h.ad).join(', ');
+      ws.getCell(r, 1).alignment = { wrapText: true };
+      ws.getRow(r).height = 30;
+      r++;
+    }
+    if (s.cherry) ws.getCell(r++, 1).value = 'Cherry sona bırakılır: ' + s.cherry;
+    if (s.karsilanmayan) ws.getCell(r++, 1).value = `⚠ ${S.sayiYaz(s.karsilanmayan)} sıra karşılanamadı`;
+    if (p.not) ws.getCell(r++, 1).value = 'Not: ' + p.not;
+    return wb;
+  }
+
   window.Rapor = {
+    planRaporu,
     drenajRaporu,
     drenajAylik,
     bitkiIceAktar,
