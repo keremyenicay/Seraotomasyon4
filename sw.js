@@ -1,5 +1,5 @@
 /* Çevrimdışı çalışma için önbellek */
-const SURUM = 'sera-v1.7.1';
+const SURUM = 'sera-v1.8.0';
 const DOSYALAR = [
   './',
   'index.html',
@@ -8,6 +8,7 @@ const DOSYALAR = [
   'js/excel.js',
   'js/app.js',
   'js/defter.js',
+  'js/plan.js',
   'js/harita.js',
   'js/sema.js',
   'js/ayar.js',

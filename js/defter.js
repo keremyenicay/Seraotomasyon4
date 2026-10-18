@@ -44,12 +44,13 @@
         <button role="tab" class="${ui.defter === 'hasat' ? 'sec geldi' : ''}" data-df="sekme" data-v="hasat">${ikon('hasat')} Hasat</button>
         <button role="tab" class="${ui.defter === 'ilac' ? 'sec geldi' : ''}" data-df="sekme" data-v="ilac">${ikon('ilac')} İlaçlama</button>
         <button role="tab" class="${ui.defter === 'drenaj' ? 'sec geldi' : ''}" data-df="sekme" data-v="drenaj">💧 Drenaj</button>
+        <button role="tab" class="${ui.defter === 'plan' ? 'sec geldi' : ''}" data-df="sekme" data-v="plan">👥 Plan</button>
       </div>
       <div class="filtre">
         <label class="alan-blok"><span>Ay</span><input type="month" data-df="ay" value="${ui.ay}"></label>
         <label class="alan-blok"><span>Sera</span><select data-df="sera">${seraSecenekleri(ui.defterSera, 'Tüm seralar')}</select></label>
       </div>
-      ${ui.defter === 'hasat' ? hasatHtml(y, m - 1, sid) : ui.defter === 'drenaj' ? drenajHtml(y, m - 1) : ilacHtml(y, m - 1, sid)}`;
+      ${ui.defter === 'hasat' ? hasatHtml(y, m - 1, sid) : ui.defter === 'drenaj' ? drenajHtml(y, m - 1) : ui.defter === 'plan' ? window.Plan.html(y, m - 1) : ilacHtml(y, m - 1, sid)}`;
   }
 
   // ---------- HASAT TAHMİNİ (kutu + palet) ----------
@@ -596,6 +597,7 @@
     if (ui.sekme !== 'defter') return;
     const b = e.target.closest('[data-df]');
     if (!b) return;
+    if (window.Plan.olay(b)) return;
     switch (b.dataset.df) {
       case 'sekme':
         ui.defter = b.dataset.v;

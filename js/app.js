@@ -1067,9 +1067,9 @@
       </section>
       <section class="panel">
         <button class="btn tehlike genis" id="rapor-sil">Sadece raporları sil</button>
-        <p class="ince">Günlük kayıtlar, hasat, ilaçlama, hasat tahminleri ve drenaj ölçümleri silinir. Harita, personel, seralar, sıralar, bitki sayımları ve karantinalar korunur.</p>
+        <p class="ince">Günlük kayıtlar, hasat, ilaçlama, hasat tahminleri, drenaj ölçümleri ve hasat/yaprak planları silinir. Harita, personel, seralar, sıralar, bitki sayımları ve karantinalar korunur.</p>
         <button class="btn tehlike genis" id="sifirla">Tüm verileri sil</button>
-        <p class="ince orta">Sera Otomasyon · v1.7.1</p>
+        <p class="ince orta">Sera Otomasyon · v1.8</p>
       </section>`;
     if (window.Bulut && window.Bulut.etkin) window.Bulut.panelCiz($('#bulut-panel'));
 
@@ -1118,9 +1118,9 @@
     };
     $('#rapor-sil').onclick = () => {
       const o = S.raporOzeti();
-      if (!o.gun && !o.hasatlar && !o.ilaclamalar && !o.tahminler && !o.drenajlar) return toast('Silinecek rapor yok');
+      if (!o.gun && !o.hasatlar && !o.ilaclamalar && !o.tahminler && !o.drenajlar && !o.planlar) return toast('Silinecek rapor yok');
       const bulut = window.Bulut && window.Bulut.etkin ? '\nDiğer telefonlardan da silinir.' : '';
-      if (!confirm(`Şu raporlar silinecek:\n• ${o.gun} günlük kayıt\n• ${o.hasatlar} hasat\n• ${o.ilaclamalar} ilaçlama\n• ${o.tahminler} hasat tahmini\n• ${o.drenajlar} drenaj ölçümü\n\nHarita, personel, sıralar, bitki sayımları ve karantinalar korunur.${bulut}\nÖnce yedek aldınız mı?`)) return;
+      if (!confirm(`Şu raporlar silinecek:\n• ${o.gun} günlük kayıt\n• ${o.hasatlar} hasat\n• ${o.ilaclamalar} ilaçlama\n• ${o.tahminler} hasat tahmini\n• ${o.drenajlar} drenaj ölçümü\n• ${o.planlar} hasat/yaprak planı\n\nHarita, personel, sıralar, bitki sayımları ve karantinalar korunur.${bulut}\nÖnce yedek aldınız mı?`)) return;
       if (!confirm('Emin misiniz? Bu işlem geri alınamaz.')) return;
       S.raporlariSil();
       toast('Raporlar silindi');

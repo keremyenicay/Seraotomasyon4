@@ -30,6 +30,9 @@
     raporlu: 'Raporlu',
   };
 
+  // Hasat / yaprak günü planı: joker ve yatırmacılar (yatırma bitince saatte `hiz` sıra yardım eder)
+  const PLAN_AYAR = { mesai: 8, hiz: 1.5, yatirmaSaat: 4, jokerEk: 2, maksEk: 4, joker: 'KEVSER KAYA', yatirmacilar: ['NAZİME', 'SAFİYE', 'ÖZLEM'] };
+
   function bosDurum() {
     return {
       surum: 1,
@@ -45,6 +48,8 @@
       yerlesim: {},
       bitkiSayimlari: [],
       karantina: {},
+      planlar: [],
+      planAyar: Object.assign({}, PLAN_AYAR),
       ayarlar: { pazarTatil: true, sonYedek: null, kurulum: new Date().toISOString() },
     };
   }
@@ -81,6 +86,8 @@
     d.yerlesim = d.yerlesim && typeof d.yerlesim === 'object' ? d.yerlesim : {};
     d.bitkiSayimlari = Array.isArray(d.bitkiSayimlari) ? d.bitkiSayimlari : [];
     d.karantina = d.karantina && typeof d.karantina === 'object' ? d.karantina : {};
+    d.planlar = Array.isArray(d.planlar) ? d.planlar : [];
+    d.planAyar = Object.assign({}, PLAN_AYAR, d.planAyar && typeof d.planAyar === 'object' ? d.planAyar : {});
     // Silinmiş personelden kalan yerleşimleri temizle
     const pidler = new Set(d.personel.map((p) => p.id));
     Object.keys(d.yerlesim).forEach((pid) => {
@@ -666,7 +673,7 @@
   // Yalnızca girilen raporları sil: günlük kayıtlar, hasat, ilaçlama, hasat tahminleri ve drenaj ölçümleri.
   // Seralar, personel, harita/sektörler, yerleşim (sıralar), bitki sayımları, karantina,
   // iş türleri ve ayarlar korunur.
-  const RAPOR_LISTELERI = ['hasatlar', 'ilaclamalar', 'tahminler', 'drenajlar'];
+  const RAPOR_LISTELERI = ['hasatlar', 'ilaclamalar', 'tahminler', 'drenajlar', 'planlar'];
   function raporOzeti() {
     const o = { gun: Object.keys(durum.gunler).length };
     RAPOR_LISTELERI.forEach((k) => (o[k] = durum[k].length));

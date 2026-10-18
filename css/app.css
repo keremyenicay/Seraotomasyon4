@@ -520,3 +520,23 @@ body.giris-acik { overflow: hidden; }
 .kayit-liste li.dren-li > button:first-child { flex: 1; min-width: 0; }
 .kayit-liste .dren-xl { width: auto; flex: none; display: grid; justify-items: center; gap: 0; padding: 6px 8px; min-height: 44px; color: var(--ana); border-left: 1px solid var(--cizgi); border-radius: 0; }
 .kayit-liste .dren-xl small { font-size: 11px; font-weight: 600; }
+/* Hasat / yaprak planı */
+.cip.yok { background: var(--kirmizi-acik); border-color: var(--kirmizi); color: var(--kirmizi); }
+.cip small { font-weight: 500; opacity: .7; }
+.plan-sera { margin: 6px 0 10px; }
+.plan-yat { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin: 6px 0; }
+.plan-saat { display: inline-flex; align-items: center; gap: 6px; font-size: 14px; }
+.plan-saat input { width: 56px; min-height: 36px; padding: 4px 8px; border: 1px solid var(--cizgi); border-radius: 8px; font-size: 16px; text-align: center; background: var(--yuzey); color: var(--metin); }
+.plan-ayar { margin: 10px 0; padding: 8px 12px; border: 1px solid var(--cizgi); border-radius: 12px; }
+.plan-ayar summary { font-weight: 600; cursor: pointer; }
+.plan-liste { list-style: none; margin: 4px 0 10px; padding: 0; }
+.plan-liste li { padding: 8px 0; border-top: 1px solid var(--cizgi); display: grid; gap: 2px; }
+.plan-liste li > div { display: flex; align-items: baseline; gap: 6px; }
+.plan-liste small { color: var(--ince); font-size: 13px; line-height: 1.35; }
+.plan-liste i { font-style: normal; color: var(--ince); }
+.plan-ek { margin-left: auto; font-weight: 700; font-variant-numeric: tabular-nums; color: var(--ana); }
+.plan-joker .plan-ek, .plan-yatirma .plan-ek { color: var(--mavi, var(--ana)); }
+.plan-kar { color: var(--kirmizi); }
+.plan-alt { margin-top: 10px; }
+.plan-metin { width: 100%; min-height: 260px; font-size: 14px; }
+.genis-seg button { padding-left: 4px; padding-right: 4px; }
