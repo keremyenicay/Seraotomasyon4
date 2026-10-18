@@ -16,7 +16,8 @@ iPhone'da çalışan, internetsiz de açılan sera iş takip uygulaması. Günl�
   - Ayın bütün günlük raporları tek dosyada (her gün bir sayfa).
   - Bitki sayımı: dosyanızın düzeninde kişi blokları, son 4 sayım yan yana, fark ve toplam bitki kaybı.
   - Dosya iPhone paylaş menüsüyle WhatsApp'a, Mail'e veya Dosyalar'a gönderilir.
-- **Hasat tahmini (sektör bazlı):** Sera seçilince sektörleri listelenir (Sera 1: 1–4, Sera 2: 5*6, 7, 8, 9, 10, 11). Her sektörde 2 sıraya girip hasada hazır **salkım** sayısı yazılır (gerekirse + ile 3. sıra). Sektörün sıra sayısı şemadan otomatik alınır: ortalama × sıra = toplam salkım. Kutu başı salkım = **alt kat (4/5/6) + üst kat (3/4/5)**; seçilen tüm kombinasyonlar tablo olarak hesaplanır, altta **ortalama kutu**. Fire % düşülebilir. Excel: tahmin başına sektör tablosu (formüllü) ve tarih × sektör özeti.
+- **Hasat miktarı (kutu + palet):** Sera seçilince sektörler listelenir (Sera 1: 1–4, Sera 2: 5, 6, 7 … 11; 5 ve 6 ayrı). Her sektörde 2 sıradan **1. kalite salkım** sayılır. **Sıra sayısı güncel bitki sayımından** gelir (bitkisi olan gutter sayısı). Kutu sayısı = salkım ÷ kutudaki salkım (**alt kat 4/5/6 + üst kat 3/4/5**, tek seçim); toplam kutu = sıra × kutu. **Paletler:** euro 13/14/15 boy (104/112/120 kutu), büyük 13/14/15 boy (130/140/150 kutu). Excel: “hasat miktarı hesaplama” düzeninde, kutudaki salkım ve palet kapasiteleri ayrı hücrelerde, tüm hesaplar formüllü; tarih × sektör özeti.
+- **Drenaj ölçümü (Defter › Drenaj):** Vana 1–10 için drip sayısı, drip başına su, drene edilen su, drenaj EC/pH, drip EC/pH. Her gün **ara ölçüm** ve **gün sonu** ayrı girilir; drenaj oranı ve EC farkı anında hesaplanır. Excel: drenaj ölçüm formu düzeninde ara ölçüm + gün sonu blokları (`=drenaj/drip suyu/drip sayısı`, % biçimi, ORTALAMA sütunu); aylık dosyada her gün bir sayfa ve vana × gün drenaj oranı özeti.
 - **Sera Defteri – İlaçlama:** ilaç, etken madde, hedef zararlı/hastalık, uygulama şekli, doz, su, kullanılan miktar, uygulayan, bekleme süresi. Daha önce kullanılan ilaç seçilince bilgiler otomatik dolar. **Bekleme süresi dolmadan** Günlük ve Hasat ekranlarında kırmızı uyarı çıkar, hasat kaydında onay istenir. Excel: İlaçlama Kayıt Defteri (hasat için uygun tarih dahil).
 - **Sera içi şema (Harita › Sera İçi):**
   - Şemadaki gibi: giriş altta. Sera 1'de sağ alt Sektör 1, sol alt Sektör 2, yoldan sonra sağda 3, solda 4. Sera 2'de 5*6, 7 ve üstte 11–10–9–8.
@@ -67,7 +68,7 @@ css/app.css           tasarım (açık/koyu tema)
 js/store.js           veri modeli ve kayıt
 js/excel.js           Excel çıktıları ve içe aktarma
 js/app.js             ekranlar
-js/defter.js          hasat tahmini ve ilaçlama defteri
+js/defter.js          hasat miktarı, ilaçlama ve drenaj defteri
 js/harita.js          uydu haritası, konum, sıra işaretleri
 js/sema.js            sera içi şema, gutter yerleşimi, bitki sayımı
 sw.js                 çevrimdışı önbellek

@@ -39,6 +39,7 @@
       gunler: {},
       hasatlar: [],
       tahminler: [],
+      drenajlar: [],
       ilaclamalar: [],
       sektorler: [],
       yerlesim: {},
@@ -75,6 +76,7 @@
     d.hasatlar = Array.isArray(d.hasatlar) ? d.hasatlar : [];
     d.ilaclamalar = Array.isArray(d.ilaclamalar) ? d.ilaclamalar : [];
     d.tahminler = Array.isArray(d.tahminler) ? d.tahminler : [];
+    d.drenajlar = Array.isArray(d.drenajlar) ? d.drenajlar : [];
     d.sektorler = Array.isArray(d.sektorler) ? d.sektorler : [];
     d.yerlesim = d.yerlesim && typeof d.yerlesim === 'object' ? d.yerlesim : {};
     d.bitkiSayimlari = Array.isArray(d.bitkiSayimlari) ? d.bitkiSayimlari : [];
@@ -292,51 +294,111 @@
       (il) => (sayi(il.bekleme) || 0) > 0 && (!il.seraId || !seraId || il.seraId === seraId) && il.tarih <= t && uygunTarih(il) > t
     );
   }
-  // ---- Hasat tahmini: sektör başına 2 sıradan salkım sayımı; kutu = alt kat + üst kat salkım ----
+  // ---- Hasat tahmini: tünel (sektör) başına örnek sıralardan 1. kalite salkım sayımı ----
+  // kutu/sıra = salkım ÷ kutudaki salkım (alt kat + üst kat); toplam kutu = sıra × kutu/sıra; palet = toplam kutu ÷ kapasite
   const ALT_KATLAR = [4, 5, 6];
   const UST_KATLAR = [3, 4, 5];
+  const PALETLER = [
+    { tur: 'EURO', boy: 13, kutu: 104 },
+    { tur: 'EURO', boy: 14, kutu: 112 },
+    { tur: 'EURO', boy: 15, kutu: 120 },
+    { tur: 'BÜYÜK', boy: 13, kutu: 130 },
+    { tur: 'BÜYÜK', boy: 14, kutu: 140 },
+    { tur: 'BÜYÜK', boy: 15, kutu: 150 },
+  ];
   function sektorSiraSayisi(sk) {
     return sk ? sk.harfler.reduce((t, h) => t + gutterSayisi(sk.seraId, h), 0) : 0;
   }
-  // Seçili alt × üst kombinasyonları (alt büyükten küçüğe, üst küçükten büyüğe)
-  function kombinasyonlar(t) {
-    const altlar = (t.altKatlar && t.altKatlar.length ? t.altKatlar : [6]).map(sayi).filter((n) => n > 0).sort((a, b) => b - a);
-    const ustler = (t.ustKatlar && t.ustKatlar.length ? t.ustKatlar : UST_KATLAR).map(sayi).filter((n) => n > 0).sort((a, b) => a - b);
+  // Hasat birimleri: seradaki tüneller, sektör numarasıyla (5*6 → 5 ve 6 ayrı)
+  function hasatBirimleri(seraId) {
     const l = [];
-    altlar.forEach((alt) => ustler.forEach((ust) => l.push({ alt, ust, adet: alt + ust })));
-    return { altlar, ustler, l };
+    sektorleriHazirla()
+      .filter((x) => x.seraId === seraId)
+      .forEach((sk) => sk.harfler.forEach((h) => l.push({ harf: h, no: SEKTOR_HARF_NO(seraId, h) || (sk.harfler.length > 1 ? sk.no + '-' + h : sk.no), sk })));
+    return l.sort((a, b) => (parseInt(a.no, 10) || 99) - (parseInt(b.no, 10) || 99));
+  }
+  // Sıra sayısı: son bitki sayımında bu tünelde bitkisi olan gutter sayısı (sayım yoksa gutter sayısı)
+  function hasatSiraSayisi(seraId, harf) {
+    const sy = sonSayim(seraId);
+    if (sy) {
+      const n = Object.entries(sy.sayilar).filter(([k, v]) => k[0] === harf && (v || 0) > 0).length;
+      if (n) return { sira: n, kaynak: sy.tarih };
+    }
+    return { sira: gutterSayisi(seraId, harf), kaynak: null };
   }
   function tahminHesapla(t) {
-    const fire = Math.min(100, Math.max(0, sayi(t && t.fire) || 0));
-    const { altlar, ustler, l: komb } = kombinasyonlar(t || {});
-    const sektorler = [];
-    Object.entries((t && t.sektorler) || {}).forEach(([skId, v]) => {
-      const sk = durum.sektorler.find((x) => x.id === skId);
+    t = t || {};
+    const alt = sayi(t.alt) || 5;
+    const ust = sayi(t.ust) || 3;
+    const kutuSalkim = alt + ust;
+    const birimler = [];
+    const sira = hasatBirimleri(t.seraId).map((x) => x.harf);
+    Object.entries(t.birimler || {}).forEach(([harf, v]) => {
       const sayimlar = (v.sayimlar || []).map(sayi).filter((n) => n !== null && n >= 0);
       if (!sayimlar.length) return;
-      const sira = sayi(v.sira) || sektorSiraSayisi(sk);
+      const s = sayi(v.sira) || hasatSiraSayisi(t.seraId, harf).sira;
       const ort = sayimlar.reduce((a, b) => a + b, 0) / sayimlar.length;
-      const salkim = Math.round(ort * sira * (1 - fire / 100));
-      const kutular = komb.map((k) => Math.ceil(salkim / k.adet));
-      sektorler.push({
-        skId,
-        no: sk ? sk.no : '?',
-        sira,
+      const kutuSira = ort / kutuSalkim;
+      const toplamKutu = s * kutuSira;
+      birimler.push({
+        harf,
+        no: SEKTOR_HARF_NO(t.seraId, harf) || harf,
+        sira: s,
         sayimlar,
         ort: Math.round(ort * 100) / 100,
-        salkim,
-        kutular,
-        ortKutu: kutular.length ? Math.round(kutular.reduce((a, b) => a + b, 0) / kutular.length) : null,
+        kutuSira: Math.round(kutuSira * 100) / 100,
+        toplamKutu,
+        salkim: Math.round(ort * s),
+        paletler: PALETLER.map((p) => toplamKutu / p.kutu),
       });
     });
-    // Sektörleri şema sırasına diz
-    const sira = durum.sektorler.map((x) => x.id);
-    sektorler.sort((a, b) => sira.indexOf(a.skId) - sira.indexOf(b.skId));
-    const toplam = sektorler.length ? sektorler.reduce((a, x) => a + x.salkim, 0) : null;
-    const kombToplam = komb.map((k, i) => Object.assign({}, k, { kutu: sektorler.reduce((a, x) => a + x.kutular[i], 0) }));
-    const ortKutu = sektorler.length && kombToplam.length ? Math.round(kombToplam.reduce((a, k) => a + k.kutu, 0) / kombToplam.length) : null;
-    return { sektorler, toplam, kombinasyonlar: kombToplam, altlar, ustler, ortKutu, fire };
+    birimler.sort((a, b) => sira.indexOf(a.harf) - sira.indexOf(b.harf));
+    const toplamKutu = birimler.reduce((a, x) => a + x.toplamKutu, 0);
+    return {
+      birimler,
+      alt,
+      ust,
+      kutuSalkim,
+      toplamSira: birimler.reduce((a, x) => a + x.sira, 0),
+      toplamKutu,
+      paletler: PALETLER.map((p) => toplamKutu / p.kutu),
+      // geriye uyum (özet, harita)
+      toplam: birimler.length ? birimler.reduce((a, x) => a + x.salkim, 0) : null,
+      ortKutu: birimler.length ? Math.round(toplamKutu) : null,
+    };
   }
+  function tahminGecerli(t) {
+    return !!(t && t.birimler && Object.keys(t.birimler).length);
+  }
+
+  // ---- Drenaj ölçümü (ara ölçüm / gün sonu) ----
+  const DRENAJ_TURLERI = { ara: 'Ara ölçüm', gunsonu: 'Gün sonu' };
+  function drenajOrani(v) {
+    const drip = sayi(v && v.drip);
+    const su = sayi(v && v.dripSu);
+    const dren = sayi(v && v.drenSu);
+    if (!drip || !su || dren === null) return null;
+    return dren / su / drip;
+  }
+  function drenajBul(tarih, tur) {
+    return durum.drenajlar.find((x) => x.tarih === tarih && x.tur === tur) || null;
+  }
+  function drenajOzet(kayit) {
+    const v = Object.values((kayit && kayit.vanalar) || {});
+    const ort = (f) => {
+      const l = v.map(f).filter((n) => n !== null && n !== undefined && isFinite(n));
+      return l.length ? l.reduce((a, b) => a + b, 0) / l.length : null;
+    };
+    return {
+      vana: v.filter((x) => drenajOrani(x) !== null || sayi(x.drenEc) !== null).length,
+      oran: ort(drenajOrani),
+      drenEc: ort((x) => sayi(x.drenEc)),
+      drenPh: ort((x) => sayi(x.drenPh)),
+      dripEc: ort((x) => sayi(x.dripEc)),
+      dripPh: ort((x) => sayi(x.dripPh)),
+    };
+  }
+
   // Serada personelin toplam sıra sayısı (tahmin için öneri)
   function seraSiraToplami(seraId) {
     return durum.personel.filter((p) => p.seraId === seraId && p.aktif).reduce((t, p) => t + (sayi(p.toplamSira) || 0), 0) || null;
@@ -649,8 +711,16 @@
     ilacKatalogu,
     ALT_KATLAR,
     UST_KATLAR,
+    PALETLER,
     sektorSiraSayisi,
+    hasatBirimleri,
+    hasatSiraSayisi,
     tahminHesapla,
+    tahminGecerli,
+    DRENAJ_TURLERI,
+    drenajOrani,
+    drenajBul,
+    drenajOzet,
     SEKTOR_HARF,
     sektorleriHazirla,
     sektorBul,

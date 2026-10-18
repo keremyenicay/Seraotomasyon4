@@ -579,114 +579,256 @@
     }
   }
 
+  // Hasat miktarı hesaplama: kullanıcının "hasat miktarı hesaplama" düzeninde (kutu + palet), formüllü
   async function hasatTahminRaporu(yil, ay, seraId) {
     const wb = new ExcelJS.Workbook();
     wb.creator = 'Sera Otomasyon';
-    const kayitlar = donemKayitlari('tahminler', yil, ay, seraId).filter((t) => t.sektorler && Object.keys(t.sektorler).length);
-    const ws = wb.addWorksheet('HASAT TAHMİNİ', {
+    const kayitlar = donemKayitlari('tahminler', yil, ay, seraId).filter(S.tahminGecerli);
+    const ws = wb.addWorksheet('HASAT MİKTARI', {
       pageSetup: { paperSize: 9, orientation: 'landscape', fitToPage: true, fitToWidth: 1, fitToHeight: 0 },
     });
     const hesaplar = kayitlar.map((t) => ({ t, h: S.tahminHesapla(t) }));
-    const maxSira = Math.max(2, ...hesaplar.map(({ h }) => Math.max(0, ...h.sektorler.map((x) => x.sayimlar.length))));
-    const ek = (n) => ({ 6: 'LI', 9: 'LU', 10: 'LU', 7: 'Lİ', 8: 'Lİ', 11: 'Lİ', 12: 'Lİ' }[n] || 'LIK');
+    const maxSira = Math.max(2, ...hesaplar.map(({ h }) => Math.max(0, ...h.birimler.map((x) => x.sayimlar.length))));
     const L = (n) => ws.getColumn(n).letter;
-    const baslik = `HASAT TAHMİNİ – ${S.AYLAR[ay]} ${yil} – ${seraAdi(seraId)}`;
-    // Sütunlar: A SEKTÖR, B SIRA, C.. sayımlar, ORT, FİRE, TOPLAM SALKIM, kombinasyonlar..., ORTALAMA KUTU
-    const cSay = 3;
-    const cOrt = cSay + maxSira;
-    const cFire = cOrt + 1;
-    const cTop = cFire + 1;
-    const cKomb = cTop + 1;
-    [14, 10].concat(new Array(maxSira).fill(10), [12, 8, 14]).forEach((w, i) => (ws.getColumn(i + 1).width = w));
-    ws.mergeCells(1, 1, 1, 12);
-    ws.getCell(1, 1).value = baslik;
+    // Sütun düzeni
+    const cSek = 1, cSira = 2, cSay = 3;
+    const cOrt = cSay + maxSira; // 1. sınıf kalite salkım sayısı
+    const cKutu = cOrt + 1; // kutu sayısı (sıra başı)
+    const cTop = cKutu + 1; // toplam kutu
+    const cPal = cTop + 1; // 6 palet sütunu
+    const nSut = cPal + S.PALETLER.length - 1;
+    [12, 11].concat(new Array(maxSira).fill(11), [16, 12, 14], S.PALETLER.map(() => 13)).forEach((w, i) => (ws.getColumn(i + 1).width = w));
+    ws.mergeCells(1, 1, 1, nSut);
+    ws.getCell(1, 1).value = `HASAT MİKTARI HESAPLAMA – ${S.AYLAR[ay]} ${yil} – ${seraAdi(seraId)}`;
     ws.getCell(1, 1).font = { bold: true, size: 14 };
     let r = 3;
-    const ozet = []; // tarih × sektör
+    const ozet = [];
     hesaplar.forEach(({ t, h }) => {
-      const komb = h.kombinasyonlar;
-      const cOrtK = cKomb + komb.length;
-      for (let i = 0; i < komb.length; i++) ws.getColumn(cKomb + i).width = Math.max(ws.getColumn(cKomb + i).width || 0, 13);
-      ws.getColumn(cOrtK).width = Math.max(ws.getColumn(cOrtK).width || 0, 13);
       // Blok başlığı
-      ws.mergeCells(r, 1, r, cOrtK);
+      ws.mergeCells(r, 1, r, nSut);
       const bb = ws.getCell(r, 1);
       bb.value = `${S.trTarih(t.tarih)} · ${seraAdi(t.seraId)}${t.not ? ' · ' + t.not : ''}`;
       bb.font = { bold: true, size: 12 };
       bb.fill = dolgu(GRI);
       bb.border = KENAR;
       r++;
+      // Parametreler: kutudaki salkım = alt + üst; palet kapasiteleri
+      const pr = r;
+      ws.getCell(pr, 1).value = 'ALT KAT';
+      ws.getCell(pr, 2).value = h.alt;
+      ws.getCell(pr, 3).value = 'ÜST KAT';
+      ws.getCell(pr, 4).value = h.ust;
+      ws.getCell(pr, 5).value = 'KUTUDAKİ SALKIM';
+      ws.getCell(pr, 6).value = { formula: `B${pr}+D${pr}`, result: h.kutuSalkim };
+      const kutuRef = `$F$${pr}`;
+      [1, 3, 5].forEach((c) => (ws.getCell(pr, c).font = { bold: true, size: 9 }));
+      ws.getCell(pr, 6).font = { bold: true };
+      ws.getCell(pr + 1, cPal - 1).value = 'PALET KUTU KAPASİTESİ →';
+      ws.getCell(pr + 1, cPal - 1).font = { bold: true, size: 9 };
+      ws.getCell(pr + 1, cPal - 1).alignment = { horizontal: 'right' };
+      S.PALETLER.forEach((p, i) => {
+        const c = ws.getCell(pr + 1, cPal + i);
+        c.value = p.kutu;
+        c.font = { bold: true, color: { argb: 'FF555555' } };
+        c.alignment = { horizontal: 'center' };
+        c.border = KENAR;
+      });
+      const kapRef = (i) => `${L(cPal + i)}$${pr + 1}`;
+      r = pr + 2;
       const bas = ['SEKTÖR', 'SIRA SAYISI']
-        .concat(Array.from({ length: maxSira }, (_, i) => `${i + 1}. SIRA (SALKIM)`), ['ORT. SALKIM / SIRA', 'FİRE %', 'TOPLAM SALKIM'])
-        .concat(komb.map((k) => `ALT ${k.alt} + ÜST ${k.ust} = ${k.adet}'${ek(k.adet)} KUTU`), ['ORTALAMA KUTU']);
+        .concat(Array.from({ length: maxSira }, (_, i) => `${i + 1}. SIRA SALKIM`), ['1. SINIF KALİTE SALKIM SAYISI', 'KUTU SAYISI', 'TOPLAM KUTU SAYISI'])
+        .concat(S.PALETLER.map((p) => `${p.tur === 'EURO' ? 'EURO' : 'BÜYÜK'} PALET ${p.boy} BOY`));
       bas.forEach((v, i) => {
         const c = ws.getCell(r, i + 1);
         c.value = v;
         c.font = { bold: true, size: 10 };
+        c.fill = dolgu(GRI);
         c.alignment = { wrapText: true, horizontal: 'center', vertical: 'middle' };
         c.border = KENAR;
       });
-      ws.getRow(r).height = 42;
+      ws.getRow(r).height = 32;
       r++;
       const ilk = r;
-      h.sektorler.forEach((x) => {
+      h.birimler.forEach((x) => {
         const row = ws.getRow(r);
-        row.getCell(1).value = 'SEKTÖR ' + x.no;
-        row.getCell(2).value = x.sira;
+        row.getCell(cSek).value = 'sektör ' + x.no;
+        row.getCell(cSira).value = x.sira;
         for (let i = 0; i < maxSira; i++) row.getCell(cSay + i).value = x.sayimlar[i] !== undefined ? x.sayimlar[i] : null;
-        row.getCell(cOrt).value = { formula: `ROUND(AVERAGE(${L(cSay)}${r}:${L(cSay + maxSira - 1)}${r}),2)`, result: x.ort };
-        row.getCell(cFire).value = h.fire || 0;
-        row.getCell(cTop).value = { formula: `ROUND(${L(cOrt)}${r}*B${r}*(1-${L(cFire)}${r}/100),0)`, result: x.salkim };
-        komb.forEach((k, i) => (row.getCell(cKomb + i).value = { formula: `ROUNDUP(${L(cTop)}${r}/${k.adet},0)`, result: x.kutular[i] }));
-        row.getCell(cOrtK).value = { formula: `ROUND(AVERAGE(${L(cKomb)}${r}:${L(cOrtK - 1)}${r}),0)`, result: x.ortKutu };
-        row.getCell(cOrtK).font = { bold: true };
-        satirKenar(row, bas.length);
-        for (let c = 2; c <= bas.length; c++) row.getCell(c).alignment = { horizontal: 'center', vertical: 'middle' };
-        ozet.push({ tarih: t.tarih, sera: seraAdi(t.seraId), no: x.no, kutu: x.ortKutu });
+        row.getCell(cOrt).value = { formula: `AVERAGE(${L(cSay)}${r}:${L(cSay + maxSira - 1)}${r})`, result: x.ort };
+        row.getCell(cKutu).value = { formula: `${L(cOrt)}${r}/${kutuRef}`, result: x.ort / h.kutuSalkim };
+        row.getCell(cTop).value = { formula: `${L(cSira)}${r}*${L(cKutu)}${r}`, result: x.toplamKutu };
+        S.PALETLER.forEach((p, i) => (row.getCell(cPal + i).value = { formula: `${L(cTop)}${r}/${kapRef(i)}`, result: x.paletler[i] }));
+        satirKenar(row, nSut);
+        for (let c = 2; c <= nSut; c++) row.getCell(c).alignment = { horizontal: 'center', vertical: 'middle' };
+        [cOrt, cKutu].forEach((c) => (row.getCell(c).numFmt = '0.00'));
+        row.getCell(cTop).numFmt = '#,##0';
+        row.getCell(cTop).font = { bold: true };
+        S.PALETLER.forEach((_, i) => (row.getCell(cPal + i).numFmt = '0.0'));
+        ozet.push({ tarih: t.tarih, sera: seraAdi(t.seraId), no: x.no, kutu: x.toplamKutu });
         r++;
       });
       const son = r - 1;
       const top = ws.getRow(r);
-      top.getCell(1).value = 'TOPLAM';
-      top.getCell(2).value = { formula: `SUM(B${ilk}:B${son})`, result: h.sektorler.reduce((a, x) => a + x.sira, 0) };
-      top.getCell(cTop).value = { formula: `SUM(${L(cTop)}${ilk}:${L(cTop)}${son})`, result: h.toplam };
-      komb.forEach((k, i) => (top.getCell(cKomb + i).value = { formula: `SUM(${L(cKomb + i)}${ilk}:${L(cKomb + i)}${son})`, result: k.kutu }));
-      top.getCell(cOrtK).value = { formula: `ROUND(AVERAGE(${L(cKomb)}${r}:${L(cOrtK - 1)}${r}),0)`, result: h.ortKutu };
-      for (let c = 1; c <= bas.length; c++) {
+      top.getCell(cSek).value = 'toplam';
+      top.getCell(cSira).value = { formula: `SUM(${L(cSira)}${ilk}:${L(cSira)}${son})`, result: h.toplamSira };
+      top.getCell(cTop).value = { formula: `SUM(${L(cTop)}${ilk}:${L(cTop)}${son})`, result: h.toplamKutu };
+      S.PALETLER.forEach((p, i) => (top.getCell(cPal + i).value = { formula: `${L(cTop)}${r}/${kapRef(i)}`, result: h.paletler[i] }));
+      for (let c = 1; c <= nSut; c++) {
         const cell = top.getCell(c);
         cell.font = { bold: true };
         cell.fill = dolgu(MAVI);
         cell.border = KENAR;
         if (c > 1) cell.alignment = { horizontal: 'center' };
       }
+      top.getCell(cTop).numFmt = '#,##0';
+      S.PALETLER.forEach((_, i) => (top.getCell(cPal + i).numFmt = '0.0'));
       r += 3;
     });
     if (!hesaplar.length) ws.getCell(3, 1).value = 'Bu dönemde hasat tahmini yok.';
-    ws.getCell(r, 1).value = 'Her sektörde örnek sıralarda hasada hazır salkım sayılır; ortalama × sıra sayısı = toplam salkım. Kutu başı salkım = alt kat + üst kat; kutu sayısı yukarı yuvarlanır.';
+    ws.getCell(r, 1).value = 'Kutu sayısı = 1. sınıf salkım ÷ kutudaki salkım (alt + üst kat). Toplam kutu = sıra sayısı × kutu sayısı. Palet = toplam kutu ÷ palet kapasitesi. Sıra sayısı güncel bitki sayımından alınır.';
     ws.getCell(r, 1).font = { italic: true, size: 9, color: { argb: 'FF666666' } };
 
-    // ÖZET: tarih × sektör (ortalama kutu)
+    // ÖZET: tarih × sektör (toplam kutu)
     const wo = wb.addWorksheet('ÖZET');
-    const tarihler = Array.from(new Set(ozet.map((x) => x.tarih + '|' + x.sera)));
-    const sekler = [];
-    S.d.sektorler.forEach((sk) => ozet.some((x) => x.no === sk.no && x.sera === seraAdi(sk.seraId)) && sekler.push({ no: sk.no, sera: seraAdi(sk.seraId) }));
-    const ob = ['TARİH', 'SERA'].concat(sekler.map((x) => 'SEKTÖR ' + x.no), ['TOPLAM KUTU']);
-    tabloBasligi(wo, `HASAT TAHMİNİ ÖZETİ (ORTALAMA KUTU) – ${S.AYLAR[ay]} ${yil}`, ob, [12, 10].concat(sekler.map(() => 11), [13]));
-    tarihler.forEach((k, i) => {
+    const satirlar = Array.from(new Set(ozet.map((x) => x.tarih + '|' + x.sera)));
+    const nolar = Array.from(new Set(ozet.map((x) => x.no))).sort((a, b) => (parseInt(a, 10) || 99) - (parseInt(b, 10) || 99));
+    const ob = ['TARİH', 'SERA'].concat(nolar.map((n) => 'SEKTÖR ' + n), ['TOPLAM KUTU', 'EURO PALET 13 BOY']);
+    tabloBasligi(wo, `HASAT MİKTARI ÖZETİ (TOPLAM KUTU) – ${S.AYLAR[ay]} ${yil}`, ob, [12, 10].concat(nolar.map(() => 11), [13, 13]));
+    satirlar.forEach((k, i) => {
       const [t, sera] = k.split('|');
-      const row = wo.getRow(3 + i);
+      const rr = 3 + i;
+      const row = wo.getRow(rr);
       tarihHucre(row.getCell(1), t);
       row.getCell(2).value = sera;
-      sekler.forEach((sk, j) => {
-        const x = ozet.find((o) => o.tarih === t && o.sera === sera && o.no === sk.no && sk.sera === sera);
-        row.getCell(3 + j).value = x ? x.kutu : null;
+      nolar.forEach((n, j) => {
+        const x = ozet.find((o) => o.tarih === t && o.sera === sera && o.no === n);
+        row.getCell(3 + j).value = x ? Math.round(x.kutu) : null;
       });
-      const lc = wo.getColumn(2 + sekler.length).letter;
-      row.getCell(3 + sekler.length).value = { formula: `SUM(C${3 + i}:${lc}${3 + i})` };
-      row.getCell(3 + sekler.length).font = { bold: true };
+      const lc = wo.getColumn(2 + nolar.length).letter;
+      const tc = 3 + nolar.length;
+      row.getCell(tc).value = { formula: `SUM(C${rr}:${lc}${rr})` };
+      row.getCell(tc).font = { bold: true };
+      row.getCell(tc + 1).value = { formula: `${wo.getColumn(tc).letter}${rr}/104` };
+      row.getCell(tc + 1).numFmt = '0.0';
       satirKenar(row, ob.length);
       for (let c = 1; c <= ob.length; c++) row.getCell(c).alignment = { horizontal: 'center' };
     });
+    return wb;
+  }
+
+  // ---------- DRENAJ ÖLÇÜM FORMU (ara ölçüm + gün sonu) ----------
+  const DRENAJ_SATIR = [
+    ['drip', (o) => 'İstasyonda ki drip sayısı', null],
+    ['dripSu', (o) => (o === 'ara' ? 'Ara ölçümde drip başına ölçülen su miktarı:' : 'Gün sonunda drip başına ölçülen su miktarı:'), null],
+    ['drenSu', (o) => (o === 'ara' ? 'Ara ölçümde drene edilen su miktarı:' : 'Gün sonunda drene edilen su miktarı:'), null],
+    ['oran', (o) => (o === 'ara' ? 'Ara ölçümdeki drenaj oranı:' : 'Gün sonundaki drenaj oranı:'), '0%'],
+    ['drenEc', (o) => (o === 'ara' ? 'Ara ölçümdeki drenaj EC:' : 'Gün sonundaki drenaj EC:'), '0.00'],
+    ['drenPh', (o) => (o === 'ara' ? 'Ara ölçümdeki drenaj pH:' : 'Gün sonundaki drenaj pH:'), '0.00'],
+    ['dripEc', (o) => (o === 'ara' ? 'Ara ölçümdeki drip EC:' : 'Gün sonundaki drip EC:'), '0.00'],
+    ['dripPh', (o) => (o === 'ara' ? 'Ara ölçümdeki drip pH:' : 'Gün sonundaki drip pH:'), '0.00'],
+  ];
+  function drenajSayfasi(wb, tarih, ad) {
+    const ws = wb.addWorksheet(ad, { pageSetup: { paperSize: 9, orientation: 'landscape', fitToPage: true, fitToWidth: 1, fitToHeight: 1 } });
+    const vs = S.d.ayarlar.vanaSayisi || 10;
+    const ortKol = vs + 2;
+    ws.getColumn(1).width = 44;
+    for (let i = 2; i <= vs + 1; i++) ws.getColumn(i).width = 10;
+    ws.getColumn(ortKol).width = 12;
+    const L = (n) => ws.getColumn(n).letter;
+    ws.getCell(1, 1).value = 'Tarih:' + S.trTarih(tarih);
+    ws.getCell(1, 1).font = { bold: true, size: 11 };
+    for (let v = 1; v <= vs; v++) {
+      const c = ws.getCell(1, v + 1);
+      c.value = 'Vana ' + v;
+      c.font = { bold: true, size: 13 };
+      c.alignment = { horizontal: 'center' };
+    }
+    ws.getCell(1, ortKol).value = 'ORTALAMA';
+    ws.getCell(1, ortKol).font = { bold: true, size: 11 };
+    let r = 2;
+    ['ara', 'gunsonu'].forEach((tur) => {
+      const k = S.drenajBul(tarih, tur);
+      ws.mergeCells(r, 1, r, ortKol);
+      const bb = ws.getCell(r, 1);
+      bb.value = (tur === 'ara' ? 'ARA ÖLÇÜM' : 'GÜN SONU') + (k && k.saat ? ' – saat ' + k.saat : '') + (k ? '' : ' – ölçüm girilmedi');
+      bb.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+      bb.fill = dolgu(tur === 'ara' ? 'FF1C7ED6' : 'FF2F9E44');
+      r++;
+      const satirNo = {};
+      DRENAJ_SATIR.forEach(([alan, etiket, fmt]) => {
+        satirNo[alan] = r;
+        const row = ws.getRow(r);
+        row.getCell(1).value = etiket(tur);
+        for (let v = 1; v <= vs; v++) {
+          const c = row.getCell(v + 1);
+          const val = k && k.vanalar[v] ? k.vanalar[v][alan] : undefined;
+          if (alan === 'oran') {
+            const o = k && k.vanalar[v] ? S.drenajOrani(k.vanalar[v]) : null;
+            c.value = { formula: `IFERROR(${L(v + 1)}${satirNo.drenSu}/${L(v + 1)}${satirNo.dripSu}/${L(v + 1)}${satirNo.drip},"")`, result: o === null ? '' : o };
+          } else c.value = val === undefined || val === null ? null : val;
+          if (fmt) c.numFmt = fmt;
+          c.alignment = { horizontal: 'center' };
+        }
+        const oc = row.getCell(ortKol);
+        oc.value = { formula: `IFERROR(AVERAGE(${L(2)}${r}:${L(vs + 1)}${r}),"")` };
+        oc.numFmt = fmt || '0';
+        oc.font = { bold: true };
+        oc.alignment = { horizontal: 'center' };
+        if (alan === 'oran') for (let c = 1; c <= ortKol; c++) row.getCell(c).font = { bold: true };
+        for (let c = 1; c <= ortKol; c++) row.getCell(c).border = KENAR;
+        r++;
+      });
+      if (k && k.not) {
+        ws.getCell(r, 1).value = 'Not: ' + k.not;
+        ws.getCell(r, 1).font = { italic: true, size: 9 };
+        r++;
+      }
+      r++;
+    });
+    return ws;
+  }
+  async function drenajRaporu(tarih) {
+    const wb = new ExcelJS.Workbook();
+    wb.creator = 'Sera Otomasyon';
+    drenajSayfasi(wb, tarih, 'Sayfa1');
+    return wb;
+  }
+  async function drenajAylik(yil, ay) {
+    const wb = new ExcelJS.Workbook();
+    wb.creator = 'Sera Otomasyon';
+    const on = `${yil}-${String(ay + 1).padStart(2, '0')}`;
+    const gunler = Array.from(new Set(S.d.drenajlar.filter((x) => x.tarih.startsWith(on)).map((x) => x.tarih))).sort();
+    const vs = S.d.ayarlar.vanaSayisi || 10;
+    const wo = wb.addWorksheet('ÖZET');
+    const ob = ['TARİH', 'ÖLÇÜM'].concat(Array.from({ length: vs }, (_, i) => 'VANA ' + (i + 1)), ['ORT. DRENAJ', 'ORT. DRENAJ EC', 'ORT. DRENAJ pH', 'ORT. DRIP EC', 'ORT. DRIP pH']);
+    tabloBasligi(wo, `DRENAJ ORANLARI – ${S.AYLAR[ay]} ${yil}`, ob, [12, 11].concat(new Array(vs).fill(9), [12, 13, 13, 12, 12]));
+    let r = 3;
+    gunler.forEach((t) => {
+      ['ara', 'gunsonu'].forEach((tur) => {
+        const k = S.drenajBul(t, tur);
+        if (!k) return;
+        const row = wo.getRow(r);
+        tarihHucre(row.getCell(1), t);
+        row.getCell(2).value = S.DRENAJ_TURLERI[tur];
+        for (let v = 1; v <= vs; v++) {
+          const o = k.vanalar[v] ? S.drenajOrani(k.vanalar[v]) : null;
+          row.getCell(2 + v).value = o;
+          row.getCell(2 + v).numFmt = '0%';
+        }
+        const oz = S.drenajOzet(k);
+        [oz.oran, oz.drenEc, oz.drenPh, oz.dripEc, oz.dripPh].forEach((x, i) => {
+          const c = row.getCell(3 + vs + i);
+          c.value = x === null ? null : Math.round(x * 1000) / 1000;
+          c.numFmt = i ? '0.00' : '0%';
+          c.font = { bold: true };
+        });
+        satirKenar(row, ob.length);
+        for (let c = 1; c <= ob.length; c++) row.getCell(c).alignment = { horizontal: 'center' };
+        r++;
+      });
+    });
+    if (!gunler.length) wo.getCell(3, 1).value = 'Bu ay drenaj ölçümü yok.';
+    gunler.forEach((t) => drenajSayfasi(wb, t, S.trTarih(t)));
     return wb;
   }
 
@@ -960,6 +1102,8 @@
   }
 
   window.Rapor = {
+    drenajRaporu,
+    drenajAylik,
     bitkiIceAktar,
     bitkiRaporu,
     hasatTahminRaporu,

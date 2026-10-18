@@ -669,8 +669,15 @@
       </section>
       <section class="panel">
         <h2>${ikon('hasat')} Hasat Tahmini</h2>
-        <p class="ince">Sektör bazında örnek sıralardan salkım sayımı, toplam salkım, alt × üst kat kombinasyonlarına göre kutu sayıları ve ortalama kutu (formüllü), tarih × sektör özeti.</p>
+        <p class="ince">“Hasat miktarı hesaplama” düzeninde: sektör, sıra sayısı (güncel bitki sayımından), 1. kalite salkım, kutu sayısı, toplam kutu, euro ve büyük palet (13/14/15 boy) – formüllü.</p>
         <button class="btn birincil genis" id="r-hasat">${ikon('excel')} Hasat tahmini Excel oluştur</button>
+      </section>
+      <section class="panel">
+        <h2>💧 Drenaj Ölçüm Formu</h2>
+        <p class="ince">Vana 1–10: drip sayısı, drip başına su, drene edilen su, drenaj oranı (formüllü), drenaj ve drip EC / pH. Ara ölçüm ve gün sonu aynı sayfada.</p>
+        <label class="alan-blok"><span>Gün</span><input type="date" id="r-dren-tarih" value="${ui.tarih}"></label>
+        <button class="btn birincil genis" id="r-dren">${ikon('excel')} Günlük drenaj formu</button>
+        <button class="btn genis" id="r-dren-ay">${ikon('excel')} Ayın tüm ölçümleri (seçili ay)</button>
       </section>
       <section class="panel">
         <h2>${ikon('hasat')} Bitki Sayımı</h2>
@@ -708,8 +715,18 @@
         dosyaHazir(await R.blob(wb), `${S.AYLAR[m - 1]} ${y} ${R.seraAdi(sid)} ${tur.toLocaleUpperCase('tr-TR')}.xlsx`);
       });
     };
-    $('#r-hasat').onclick = donemDosya('Hasat tahmini', R.hasatTahminRaporu);
+    $('#r-hasat').onclick = donemDosya('Hasat miktarı hesaplama', R.hasatTahminRaporu);
     $('#r-ilac').onclick = donemDosya('İlaçlama kayıtları', R.ilaclamaRaporu);
+    $('#r-dren').onclick = () =>
+      calis('Drenaj', async () => {
+        const t = $('#r-dren-tarih').value || ui.tarih;
+        dosyaHazir(await R.blob(await R.drenajRaporu(t)), `DRENAJ ÖLÇÜM FORMU ${S.trTarih(t)}.xlsx`);
+      });
+    $('#r-dren-ay').onclick = () =>
+      calis('Drenaj', async () => {
+        const [y, m] = ($('#r-ay').value || ui.ay).split('-').map(Number);
+        dosyaHazir(await R.blob(await R.drenajAylik(y, m - 1)), `${S.AYLAR[m - 1]} ${y} DRENAJ ÖLÇÜMLERİ.xlsx`);
+      });
     $('#r-bitki').onclick = () =>
       calis('Bitki sayımı', async () => {
         if (!S.d.bitkiSayimlari.length && !Object.keys(S.d.yerlesim).length) throw new Error('Henüz kişi yerleşimi ya da bitki sayımı yok. Ayarlar › Excel’den içe aktar ile bitki sayısı dosyasını yükleyin.');
@@ -827,21 +844,22 @@
   }
 
   function hasatOzetPaneli(y, ay, seraId) {
-    const t = R.donemKayitlari('tahminler', y, ay, seraId).filter((x) => x.sektorler);
+    const t = R.donemKayitlari('tahminler', y, ay, seraId).filter(S.tahminGecerli);
     const il = R.donemKayitlari('ilaclamalar', y, ay, seraId);
-    if (!t.length && !il.length) return '';
-    const hes = t.map((x) => S.tahminHesapla(x));
-    const kutu = hes.reduce((a, h) => a + (h.ortKutu || 0), 0);
-    const meyve = hes.reduce((a, h) => a + (h.toplam || 0), 0);
+    const on = `${y}-${String(ay + 1).padStart(2, '0')}`;
+    const dr = S.d.drenajlar.filter((x) => x.tarih.startsWith(on));
+    if (!t.length && !il.length && !dr.length) return '';
     const son = t[t.length - 1];
+    const sh = son ? S.tahminHesapla(son) : null;
+    const oranlar = dr.map((x) => S.drenajOzet(x).oran).filter((n) => n !== null);
+    const nf1 = (n) => Number(n).toLocaleString('tr-TR', { maximumFractionDigits: 1 });
     return `<section class="panel">
-      <h2>${ikon('hasat')} Hasat tahmini ve ilaçlama</h2>
+      <h2>${ikon('hasat')} Hasat, ilaçlama, drenaj</h2>
       <ul class="liste">
-        <li><span>Tahmin sayısı</span><b>${t.length}</b></li>
-        <li><span>Toplam tahmini salkım</span><b>${meyve.toLocaleString('tr-TR')}</b></li>
-        <li><span>Toplam ortalama kutu</span><b>≈ ${kutu.toLocaleString('tr-TR')}</b></li>
-        ${son ? `<li><span>Son tahmin (${S.trTarih(son.tarih)} · ${esc(R.seraAdi(son.seraId))})</span><b>≈ ${(S.tahminHesapla(son).ortKutu || 0).toLocaleString('tr-TR')} kutu</b></li>` : ''}
+        <li><span>Hasat tahmini sayısı</span><b>${t.length}</b></li>
+        ${sh ? `<li><span>Son tahmin (${S.trTarih(son.tarih)} · ${esc(R.seraAdi(son.seraId))})</span><b>${Math.round(sh.toplamKutu).toLocaleString('tr-TR')} kutu · ${nf1(sh.paletler[0])} euro palet</b></li>` : ''}
         <li><span>İlaçlama sayısı</span><b>${il.length}</b></li>
+        ${dr.length ? `<li><span>Drenaj ölçümü (${dr.length})</span><b>ort. %${nf1((oranlar.reduce((a, b) => a + b, 0) / (oranlar.length || 1)) * 100)}</b></li>` : ''}
       </ul>
     </section>`;
   }
@@ -1047,7 +1065,7 @@
       </section>
       <section class="panel">
         <button class="btn tehlike genis" id="sifirla">Tüm verileri sil</button>
-        <p class="ince orta">Sera Otomasyon · v1.5</p>
+        <p class="ince orta">Sera Otomasyon · v1.6</p>
       </section>`;
 
     $('#git-personel').onclick = () => {
