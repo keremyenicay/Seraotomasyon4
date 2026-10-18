@@ -460,6 +460,20 @@ body[data-sekme="harita"] .leaflet-control-zoom { display: none; }
 .tahmin-sektorler { display: flex; flex-wrap: wrap; gap: 6px; }
 .tahmin-sektorler span { background: var(--yuzey-2); border-radius: 8px; padding: 3px 8px; font-size: 13px; font-variant-numeric: tabular-nums; }
 
+/* Palet ve drenaj */
+.ts-palet td { text-align: center; vertical-align: top; }
+.ts-palet td small { display: block; font-size: 10.5px; color: var(--ince); }
+.ts-palet td b { display: block; font-size: 17px; }
+.ts-palet th { font-size: 12px; color: var(--ince); text-align: center; }
+.ts-palet tbody th { text-align: left; }
+.satir-btn.uc-btn { grid-template-columns: 1fr 1fr auto; }
+.vana-cipler .cip.tamam { border-color: var(--ana); }
+.vana-kart { border: 1px solid var(--cizgi); border-radius: 14px; padding: 6px 12px 10px; margin: 8px 0; }
+.vana-alanlar { display: grid; grid-template-columns: 1fr 1fr; gap: 0 10px; }
+.vana-alanlar .alan-blok { margin: 6px 0; }
+.vana-alanlar input { text-align: center; font-variant-numeric: tabular-nums; }
+.dren-tablo th, .dren-tablo td { text-align: center; font-size: 12.5px; padding: 5px 2px; }
+
 @media (max-width: 370px) {
   .sayilar { grid-template-columns: 64px 1fr 64px; }
   .seg button { padding: 7px 6px; font-size: 12px; }
