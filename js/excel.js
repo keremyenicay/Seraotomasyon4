@@ -727,7 +727,7 @@
     ['dripEc', (o) => (o === 'ara' ? 'Ara ölçümdeki drip EC:' : 'Gün sonundaki drip EC:'), '0.00'],
     ['dripPh', (o) => (o === 'ara' ? 'Ara ölçümdeki drip pH:' : 'Gün sonundaki drip pH:'), '0.00'],
   ];
-  function drenajSayfasi(wb, tarih, ad) {
+  function drenajSayfasi(wb, tarih, ad, turler = ['ara', 'gunsonu']) {
     const ws = wb.addWorksheet(ad, { pageSetup: { paperSize: 9, orientation: 'landscape', fitToPage: true, fitToWidth: 1, fitToHeight: 1 } });
     const vs = S.d.ayarlar.vanaSayisi || 10;
     const ortKol = vs + 2;
@@ -746,7 +746,7 @@
     ws.getCell(1, ortKol).value = 'ORTALAMA';
     ws.getCell(1, ortKol).font = { bold: true, size: 11 };
     let r = 2;
-    ['ara', 'gunsonu'].forEach((tur) => {
+    turler.forEach((tur) => {
       const k = S.drenajBul(tarih, tur);
       ws.mergeCells(r, 1, r, ortKol);
       const bb = ws.getCell(r, 1);
@@ -787,10 +787,11 @@
     });
     return ws;
   }
-  async function drenajRaporu(tarih) {
+  // Günlük dosya tek ölçümü içerir (ara ölçüm ve gün sonu ekibe ayrı gönderilir); birleşik görünüm sadece aylıkta
+  async function drenajRaporu(tarih, tur) {
     const wb = new ExcelJS.Workbook();
     wb.creator = 'Sera Otomasyon';
-    drenajSayfasi(wb, tarih, 'Sayfa1');
+    drenajSayfasi(wb, tarih, 'Sayfa1', tur ? [tur] : undefined);
     return wb;
   }
   async function drenajAylik(yil, ay) {

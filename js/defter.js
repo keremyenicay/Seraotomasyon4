@@ -298,19 +298,27 @@
               .map((t) => {
                 const kayitlar = ['ara', 'gunsonu'].map((tur) => S.drenajBul(t, tur));
                 return `<section class="panel kayit-grup">
-                  <div class="grup-ust"><b>${S.trTarih(t)} ${S.GUNLER[S.strTarih(t).getDay()]}</b><button class="link-btn" data-df="dren-excel" data-tarih="${t}">${ikon('excel')} Excel</button></div>
+                  <div class="grup-ust"><b>${S.trTarih(t)} ${S.GUNLER[S.strTarih(t).getDay()]}</b></div>
                   <ul class="kayit-liste">${kayitlar
                     .map((k, i) => {
                       const tur = i ? 'gunsonu' : 'ara';
                       if (!k) return `<li><button data-df="dren-ac" data-tur="${tur}" data-tarih="${t}"><span class="k-sol"><b>${S.DRENAJ_TURLERI[tur]}</b><small>girilmedi – eklemek için dokunun</small></span></button></li>`;
                       const o = S.drenajOzet(k);
-                      return `<li><button data-df="dren-ac" data-tur="${tur}" data-tarih="${t}"><span class="k-sol"><b>${S.DRENAJ_TURLERI[tur]}${k.saat ? ' · ' + esc(k.saat) : ''}</b><small>${o.vana} vana · drenaj EC ${nf(o.drenEc, 2)} pH ${nf(o.drenPh, 2)} · drip EC ${nf(o.dripEc, 2)} pH ${nf(o.dripPh, 2)}</small></span><span class="k-sag"><b>${yuzde(o.oran)}</b><small>drenaj</small></span></button></li>`;
+                      return `<li class="dren-li"><button data-df="dren-ac" data-tur="${tur}" data-tarih="${t}"><span class="k-sol"><b>${S.DRENAJ_TURLERI[tur]}${k.saat ? ' · ' + esc(k.saat) : ''}</b><small>${o.vana} vana · drenaj EC ${nf(o.drenEc, 2)} pH ${nf(o.drenPh, 2)} · drip EC ${nf(o.dripEc, 2)} pH ${nf(o.dripPh, 2)}</small></span><span class="k-sag"><b>${yuzde(o.oran)}</b><small>drenaj</small></span></button><button class="dren-xl" data-df="dren-excel" data-tur="${tur}" data-tarih="${t}" aria-label="${S.DRENAJ_TURLERI[tur]} Excel">${ikon('excel')}<small>Excel</small></button></li>`;
                     })
                     .join('')}</ul></section>`;
               })
               .join('')
           : '<p class="ince orta">Bu ay drenaj ölçümü yok. “Ara ölçüm” veya “Gün sonu” ile başlayın.</p>'
       }`;
+  }
+
+  // Ara ölçüm ve gün sonu ekibe ayrı gönderildiği için her ölçümün kendi dosyası var
+  function drenajExcel(t, tur) {
+    if (!S.drenajBul(t, tur)) return toast(`${S.trTarih(t)} için ${S.DRENAJ_TURLERI[tur]} girilmemiş`);
+    return calis('Drenaj', async () =>
+      dosyaHazir(await R.blob(await R.drenajRaporu(t, tur)), `DRENAJ ÖLÇÜM FORMU ${S.trTarih(t)} ${tur === 'ara' ? 'ARA ÖLÇÜM' : 'GÜN SONU'}.xlsx`)
+    );
   }
 
   function drenajFormu(tarih, tur) {
@@ -330,8 +338,8 @@
        <div class="vana-kart" id="d-kart"></div>
        <div id="d-ozet"></div>
        <label class="alan-blok"><span>Not</span><input id="d-not" value="${esc(f.not || '')}"></label>
-       <button class="btn birincil genis" id="d-kaydet">Kaydet</button>
-       ${varolan ? '<button class="btn tehlike genis" id="d-sil">Bu ölçümü sil</button>' : ''}`,
+       <button class="btn birincil genis" id="d-kaydet">${ikon('excel')} Kaydet ve Excel'i al</button>
+       ${varolan ? `<button class="btn genis" id="d-excel">${ikon('excel')} Kayıtlı ölçümün Excel'i</button><button class="btn tehlike genis" id="d-sil">Bu ölçümü sil</button>` : ''}`,
       (g) => {
         const kartKaydet = () => {
           const v = {};
@@ -424,7 +432,10 @@
           toast('Drenaj ölçümü kaydedildi');
           sayfaKapat();
           ciz();
+          drenajExcel(f.tarih, f.tur);
         };
+        const xl = $('#d-excel', g);
+        if (xl) xl.onclick = () => drenajExcel(varolan.tarih, varolan.tur);
         const sil = $('#d-sil', g);
         if (sil)
           sil.onclick = () => {
@@ -605,10 +616,7 @@
       case 'dren-ac':
         return drenajFormu(b.dataset.tarih || bugun(), b.dataset.tur);
       case 'dren-excel':
-        return calis('Drenaj', async () => {
-          const t = b.dataset.tarih;
-          dosyaHazir(await R.blob(await R.drenajRaporu(t)), `DRENAJ ÖLÇÜM FORMU ${S.trTarih(t)}.xlsx`);
-        });
+        return drenajExcel(b.dataset.tarih, b.dataset.tur);
       case 'dren-excel-ay':
         return calis('Drenaj', async () => {
           const [yy, mm] = ui.ay.split('-').map(Number);
@@ -631,4 +639,5 @@
   });
 
   A.ekranlar.defter = ciz;
+  A.drenajExcel = drenajExcel;
 })();

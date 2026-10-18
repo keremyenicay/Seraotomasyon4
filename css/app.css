@@ -515,3 +515,8 @@ body.giris-acik { overflow: hidden; }
 .kullanicilar li.pasif { opacity: .55; }
 .giris .donen { border-color: var(--cizgi); border-top-color: var(--ana); }
 .kullanicilar li small { text-align: left; }
+/* Drenaj listesinde ölçüm başına Excel düğmesi */
+.kayit-liste li.dren-li { display: flex; align-items: center; gap: 8px; }
+.kayit-liste li.dren-li > button:first-child { flex: 1; min-width: 0; }
+.kayit-liste .dren-xl { width: auto; flex: none; display: grid; justify-items: center; gap: 0; padding: 6px 8px; min-height: 44px; color: var(--ana); border-left: 1px solid var(--cizgi); border-radius: 0; }
+.kayit-liste .dren-xl small { font-size: 11px; font-weight: 600; }

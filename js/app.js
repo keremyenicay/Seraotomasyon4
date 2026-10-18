@@ -40,8 +40,10 @@
     toastZ = setTimeout(() => t.classList.remove('gor'), 2600);
   }
 
+  let kapatZ;
   function sayfaAc(baslik, html, baglayici) {
     const k = $('#katman');
+    clearTimeout(kapatZ); // hemen ardından açılan sayfayı, önceki kapanışın gecikmeli gizlemesi kapatmasın
     $('#sayfa-baslik').textContent = baslik;
     $('#sayfa-govde').innerHTML = html;
     k.hidden = false;
@@ -51,7 +53,7 @@
   function sayfaKapat() {
     const k = $('#katman');
     k.classList.remove('acik');
-    setTimeout(() => (k.hidden = true), 200);
+    kapatZ = setTimeout(() => (k.hidden = true), 200);
   }
   $('#katman').addEventListener('click', (e) => {
     if (e.target.id === 'katman' || e.target.closest('[data-kapat]')) sayfaKapat();
@@ -674,10 +676,13 @@
       </section>
       <section class="panel">
         <h2>💧 Drenaj Ölçüm Formu</h2>
-        <p class="ince">Vana 1–10: drip sayısı, drip başına su, drene edilen su, drenaj oranı (formüllü), drenaj ve drip EC / pH. Ara ölçüm ve gün sonu aynı sayfada.</p>
+        <p class="ince">Vana 1–10: drip sayısı, drip başına su, drene edilen su, drenaj oranı (formüllü), drenaj ve drip EC / pH. Günlük dosya her ölçüm için ayrıdır; aylık dosyada ara ölçüm ve gün sonu birleşik.</p>
         <label class="alan-blok"><span>Gün</span><input type="date" id="r-dren-tarih" value="${ui.tarih}"></label>
-        <button class="btn birincil genis" id="r-dren">${ikon('excel')} Günlük drenaj formu</button>
-        <button class="btn genis" id="r-dren-ay">${ikon('excel')} Ayın tüm ölçümleri (seçili ay)</button>
+        <div class="iki">
+          <button class="btn birincil" id="r-dren" data-tur="ara">${ikon('excel')} Ara ölçüm</button>
+          <button class="btn birincil" id="r-dren-son" data-tur="gunsonu">${ikon('excel')} Gün sonu</button>
+        </div>
+        <button class="btn genis" id="r-dren-ay">${ikon('excel')} Ayın tüm ölçümleri – birleşik (seçili ay)</button>
       </section>
       <section class="panel">
         <h2>${ikon('hasat')} Bitki Sayımı</h2>
@@ -717,11 +722,7 @@
     };
     $('#r-hasat').onclick = donemDosya('Hasat miktarı hesaplama', R.hasatTahminRaporu);
     $('#r-ilac').onclick = donemDosya('İlaçlama kayıtları', R.ilaclamaRaporu);
-    $('#r-dren').onclick = () =>
-      calis('Drenaj', async () => {
-        const t = $('#r-dren-tarih').value || ui.tarih;
-        dosyaHazir(await R.blob(await R.drenajRaporu(t)), `DRENAJ ÖLÇÜM FORMU ${S.trTarih(t)}.xlsx`);
-      });
+    $('#r-dren').onclick = $('#r-dren-son').onclick = (e) => window.SeraApp.drenajExcel($('#r-dren-tarih').value || ui.tarih, e.currentTarget.dataset.tur);
     $('#r-dren-ay').onclick = () =>
       calis('Drenaj', async () => {
         const [y, m] = ($('#r-ay').value || ui.ay).split('-').map(Number);
@@ -1068,7 +1069,7 @@
         <button class="btn tehlike genis" id="rapor-sil">Sadece raporları sil</button>
         <p class="ince">Günlük kayıtlar, hasat, ilaçlama, hasat tahminleri ve drenaj ölçümleri silinir. Harita, personel, seralar, sıralar, bitki sayımları ve karantinalar korunur.</p>
         <button class="btn tehlike genis" id="sifirla">Tüm verileri sil</button>
-        <p class="ince orta">Sera Otomasyon · v1.7</p>
+        <p class="ince orta">Sera Otomasyon · v1.7.1</p>
       </section>`;
     if (window.Bulut && window.Bulut.etkin) window.Bulut.panelCiz($('#bulut-panel'));
 
