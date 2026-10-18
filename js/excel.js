@@ -1147,7 +1147,7 @@
       .filter((h) => h.ek > 0)
       .forEach((h) => {
         const row = ws.getRow(r++);
-        const not = [h.karantina ? 'En son karantina: ' + h.karantina : '', h.tip === 'yatirma' ? `Yatırma ${S.sayiYaz(h.saat)} saat, yardım ≈${S.sayiYaz(h.yardimSaat)} saat` : ''].filter(Boolean).join(' · ');
+        const not = [h.karantina ? 'Karantina ' + h.karantina + ' en son yapılır' : '', h.tip === 'yatirma' ? `Yatırma ${S.sayiYaz(h.saat)} saat, yardım ≈${S.sayiYaz(h.yardimSaat)} saat` : ''].filter(Boolean).join(' · ');
         [h.ad, gorev[h.tip], h.ek, h.yer, h.kimin.join(', '), h.tip === 'normal' ? 'Kendi yeri: ' + h.kendi : '', not || null].forEach((v, j) => (row.getCell(j + 1).value = v));
         satirKenar(row, b2.length);
       });
