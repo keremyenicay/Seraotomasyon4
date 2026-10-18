@@ -1035,8 +1035,9 @@
     const kayitGun = Object.keys(S.d.gunler).length;
     $('#ekran').innerHTML = `
       <h1 class="baslik">Ayarlar</h1>
+      <div id="bulut-panel"></div>
       <button class="panel menu-satir" id="git-personel">${ikon('personel')}<span><b>Personel & Seralar</b><small>${S.d.seralar.length} sera · ${S.d.personel.filter((p) => p.aktif).length} aktif personel</small></span>${ikon('sag')}</button>
-      ${yedekHatirlat() ? `<div class="uyari-bant">Son yedeğin üzerinden 7 günden fazla geçti. Verileriniz sadece bu telefonda; lütfen yedek alın.</div>` : ''}
+      ${yedekHatirlat() && !(window.Bulut && window.Bulut.etkin) ? `<div class="uyari-bant">Son yedeğin üzerinden 7 günden fazla geçti. Verileriniz sadece bu telefonda; lütfen yedek alın.</div>` : ''}
       <section class="panel">
         <h2>${ikon('yukle')} Excel'den içe aktar</h2>
         <p class="ince">Mevcut <b>günlük rapor</b> (SERA GÜNLÜK RAPOR …), <b>aylık personel raporu</b> (… AYI SERA 1 RAPOR) veya <b>bitki sayısı</b> (SERA 1 VE 2 BİTKİ SAYISI) dosyalarını seçin. Seralar, personel, sıra sayıları ve o günlerin kayıtları otomatik eklenir. Birden fazla dosya seçebilirsiniz.</p>
@@ -1064,9 +1065,12 @@
         <ol class="adimlar"><li>Bu sayfayı <b>Safari</b>'de açın.</li><li>Alttaki <b>Paylaş</b> düğmesine dokunun.</li><li><b>Ana Ekrana Ekle</b>'yi seçin.</li><li>Uygulama artık internetsiz de açılır.</li></ol>
       </section>
       <section class="panel">
+        <button class="btn tehlike genis" id="rapor-sil">Sadece raporları sil</button>
+        <p class="ince">Günlük kayıtlar, hasat, ilaçlama, hasat tahminleri ve drenaj ölçümleri silinir. Harita, personel, seralar, sıralar, bitki sayımları ve karantinalar korunur.</p>
         <button class="btn tehlike genis" id="sifirla">Tüm verileri sil</button>
-        <p class="ince orta">Sera Otomasyon · v1.6</p>
+        <p class="ince orta">Sera Otomasyon · v1.7</p>
       </section>`;
+    if (window.Bulut && window.Bulut.etkin) window.Bulut.panelCiz($('#bulut-panel'));
 
     $('#git-personel').onclick = () => {
       ui.sekme = 'personel';
@@ -1110,6 +1114,16 @@
     $('#pazar').onchange = (e) => {
       S.d.ayarlar.pazarTatil = e.target.checked;
       S.kaydet();
+    };
+    $('#rapor-sil').onclick = () => {
+      const o = S.raporOzeti();
+      if (!o.gun && !o.hasatlar && !o.ilaclamalar && !o.tahminler && !o.drenajlar) return toast('Silinecek rapor yok');
+      const bulut = window.Bulut && window.Bulut.etkin ? '\nDiğer telefonlardan da silinir.' : '';
+      if (!confirm(`Şu raporlar silinecek:\n• ${o.gun} günlük kayıt\n• ${o.hasatlar} hasat\n• ${o.ilaclamalar} ilaçlama\n• ${o.tahminler} hasat tahmini\n• ${o.drenajlar} drenaj ölçümü\n\nHarita, personel, sıralar, bitki sayımları ve karantinalar korunur.${bulut}\nÖnce yedek aldınız mı?`)) return;
+      if (!confirm('Emin misiniz? Bu işlem geri alınamaz.')) return;
+      S.raporlariSil();
+      toast('Raporlar silindi');
+      ciz();
     };
     $('#sifirla').onclick = () => {
       if (!confirm('TÜM veriler silinecek. Önce yedek aldınız mı?')) return;
