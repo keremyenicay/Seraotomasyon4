@@ -1069,7 +1069,7 @@
         <button class="btn tehlike genis" id="rapor-sil">Sadece raporları sil</button>
         <p class="ince">Günlük kayıtlar, hasat, ilaçlama, hasat tahminleri, drenaj ölçümleri ve hasat/yaprak planları silinir. Harita, personel, seralar, sıralar, bitki sayımları ve karantinalar korunur.</p>
         <button class="btn tehlike genis" id="sifirla">Tüm verileri sil</button>
-        <p class="ince orta">Sera Otomasyon · v1.8.3</p>
+        <p class="ince orta">Sera Otomasyon · v1.8.4</p>
       </section>`;
     if (window.Bulut && window.Bulut.etkin) window.Bulut.panelCiz($('#bulut-panel'));
 
