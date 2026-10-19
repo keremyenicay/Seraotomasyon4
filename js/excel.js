@@ -120,24 +120,22 @@
     const g = S.gun(t);
     const seralar = S.d.seralar.filter((s) => gunPersoneli(t, s.id).length);
 
-    let isSayisi = 2;
+    let isSayisi = 1; // en fazla kaç iş girildiyse o kadar iş sütunu (boş 2. iş sütunu çıkmaz)
     seralar.forEach((s) =>
       gunPersoneli(t, s.id).forEach((p) => {
         const k = g && g.kayitlar[p.id];
         isSayisi = Math.max(isSayisi, adliIsler(k).length);
       })
     );
-    const notKol = 3 + isSayisi * 4; // 2 iş için K (11)
+    const notKol = 3 + isSayisi * 2; // iş başına 2 sütun: iş adı + kalan sıra
 
     // Sütun genişlikleri (orijinal dosyadan)
     ws.getColumn(1).width = 18.78;
     ws.getColumn(2).width = 15.11;
     for (let j = 0; j < isSayisi; j++) {
-      const b = 3 + j * 4;
+      const b = 3 + j * 2;
       ws.getColumn(b).width = j === 0 ? 9.66 : 16.89;
       ws.getColumn(b + 1).width = 10.11;
-      ws.getColumn(b + 2).width = 10.11;
-      ws.getColumn(b + 3).width = j === 0 ? 5 : 0.11;
     }
     ws.getColumn(notKol).width = 35.89;
 
@@ -155,10 +153,12 @@
 
     let r = 2;
     const isGenislik = new Array(isSayisi).fill(0);
+    const L = (n) => ws.getColumn(n).letter;
+    const seraToplamlari = []; // [satır, sonuç]
     seralar.forEach((s, si) => {
       // Başlık
       const basliklar = [s.ad, 'TOPLAM SIRA SAYISI'];
-      for (let j = 0; j < isSayisi; j++) basliklar.push('YAPILAN İŞ', 'YAPILAN SIRA SAYISI', 'KALAN SIRA SAYISI', '');
+      for (let j = 0; j < isSayisi; j++) basliklar.push('YAPILAN İŞ', 'KALAN SIRA SAYISI');
       basliklar.forEach((v, i) => {
         const c = ws.getCell(r, i + 1);
         c.value = v || null;
@@ -175,6 +175,8 @@
       nb.border = KENAR;
       r++;
 
+      const ilk = r;
+      const kalanTop = new Array(isSayisi).fill(0);
       gunPersoneli(t, s.id).forEach((p) => {
         const k = g && g.kayitlar[p.id];
         const isler = adliIsler(k);
@@ -182,22 +184,17 @@
         row.getCell(1).value = p.ad;
         row.getCell(2).value = p.siraMetni || (p.toplamSira !== null ? S.sayiYaz(p.toplamSira) : null);
         for (let j = 0; j < isSayisi; j++) {
-          const b = 3 + j * 4;
+          const b = 3 + j * 2;
           const x = isler[j];
           if (x) {
-            const top = S.sayi(x.toplam);
             const kal = S.sayi(x.kalan) || 0;
             row.getCell(b).value = S.trUpper(x.is);
-            const L = (n) => ws.getColumn(n).letter;
-            row.getCell(b + 1).value =
-              top !== null ? { formula: `${L(b + 3)}${r}-${L(b + 2)}${r}`, result: S.yapilan(x) } : null;
-            row.getCell(b + 2).value = kal;
-            row.getCell(b + 3).value = top;
+            row.getCell(b + 1).value = kal;
+            kalanTop[j] += kal;
             isGenislik[j] = Math.max(isGenislik[j], S.trUpper(x.is).length);
           }
           if (j === 0) row.getCell(b).fill = dolgu(MAVI);
           row.getCell(b + 1).alignment = { horizontal: 'center' };
-          row.getCell(b + 2).alignment = { horizontal: 'center' };
         }
         row.getCell(notKol).value = notMetni(k) || null;
         for (let i = 1; i <= notKol; i++) {
@@ -207,10 +204,43 @@
         }
         r++;
       });
+
+      // Seranın kalan sıra toplamı
+      const son = r - 1;
+      const row = ws.getRow(r);
+      row.getCell(1).value = `${s.ad} KALAN SIRA TOPLAMI`;
+      const kalKol = Array.from({ length: isSayisi }, (_, j) => L(3 + j * 2 + 1));
+      const genel = kalanTop.reduce((a, b) => a + b, 0);
+      row.getCell(2).value = son >= ilk ? { formula: kalKol.map((k) => `SUM(${k}${ilk}:${k}${son})`).join('+'), result: genel } : 0;
+      for (let j = 0; j < isSayisi; j++) {
+        const c = row.getCell(3 + j * 2 + 1);
+        c.value = son >= ilk ? { formula: `SUM(${kalKol[j]}${ilk}:${kalKol[j]}${son})`, result: kalanTop[j] } : 0;
+      }
+      for (let i = 1; i <= notKol; i++) {
+        const c = row.getCell(i);
+        c.border = KENAR;
+        c.font = { bold: true, size: 11 };
+        c.fill = dolgu(GRI);
+        if (i > 1) c.alignment = { horizontal: 'center' };
+      }
+      seraToplamlari.push([r, genel]);
+      r += 2;
     });
+    if (seraToplamlari.length > 1) {
+      const row = ws.getRow(r);
+      row.getCell(1).value = 'GENEL TOPLAM KALAN SIRA';
+      row.getCell(2).value = { formula: seraToplamlari.map(([n]) => `B${n}`).join('+'), result: seraToplamlari.reduce((a, [, v]) => a + v, 0) };
+      [1, 2].forEach((i) => {
+        const c = row.getCell(i);
+        c.border = KENAR;
+        c.font = { bold: true, size: 12 };
+        c.fill = dolgu(GRI);
+      });
+      row.getCell(2).alignment = { horizontal: 'center' };
+    }
     // İş adı sütunlarını içeriğe göre genişlet
     isGenislik.forEach((len, j) => {
-      const col = ws.getColumn(3 + j * 4);
+      const col = ws.getColumn(3 + j * 2);
       col.width = Math.max(col.width, Math.min(40, len * 1.05 + 2));
     });
     return wb;
@@ -404,17 +434,31 @@
           ist.sera++;
         }
         isKol = [];
+        const bas = {};
         row.eachCell((c, cn) => {
           const v = S.trUpper(hv(c) || '');
+          bas[cn] = v;
           if (v === 'YAPILAN İŞ') isKol.push(cn);
           if (v.startsWith('GELMEYENLER')) notKol = cn;
+        });
+        // Her işin "yapılan / kalan / toplam" sütunu başlıktan bulunur (eski 4 sütunlu ve yeni 2 sütunlu düzen)
+        isKol = isKol.map((c, i) => {
+          const sinir = isKol[i + 1] || c + 4;
+          const ara = (on) => {
+            for (let k = c + 1; k < sinir; k++) if ((bas[k] || '').startsWith(on)) return k;
+            return null;
+          };
+          const yap = ara('YAPILAN SIRA');
+          const kal = ara('KALAN');
+          return { c, yap, kal, top: yap && kal && sinir > c + 3 ? c + 3 : null };
         });
         return;
       }
       if (!sera || !a) return;
+      if (/KALAN SIRA TOPLAMI$|^GENEL TOPLAM/.test(S.trUpper(String(a)))) return;
       const ad = String(a);
       const siraMetni = b !== null ? String(b) : '';
-      const ilkTop = isKol.length ? S.sayi(hv(row.getCell(isKol[0] + 3))) : null;
+      const ilkTop = isKol.length && isKol[0].top ? S.sayi(hv(row.getCell(isKol[0].top))) : null;
       const toplamSira = ilkTop !== null ? ilkTop : S.siraMetnindenToplam(siraMetni);
       let p = seraPersonelBul(ad, sera.id);
       if (!p) {
@@ -426,17 +470,17 @@
       }
       if (!t) return;
       const isler = [];
-      isKol.forEach((c) => {
-        const is = hv(row.getCell(c));
+      isKol.forEach((k) => {
+        const is = hv(row.getCell(k.c));
         if (!is) return;
-        const yap = S.sayi(hv(row.getCell(c + 1)));
-        const kal = S.sayi(hv(row.getCell(c + 2)));
-        let top = S.sayi(hv(row.getCell(c + 3)));
+        const yap = k.yap ? S.sayi(hv(row.getCell(k.yap))) : null;
+        const kal = k.kal ? S.sayi(hv(row.getCell(k.kal))) : null;
+        let top = k.top ? S.sayi(hv(row.getCell(k.top))) : null;
         if (top === null && yap !== null) top = yap + (kal || 0);
         if (top === null) top = p.toplamSira;
         isler.push({ is: isTuruEkle(is), toplam: top, kalan: kal || 0 });
       });
-      const nk = notKol || (isKol.length ? isKol[isKol.length - 1] + 4 : null);
+      const nk = notKol || (isKol.length ? isKol[isKol.length - 1].c + 4 : null);
       const d = durumAyristir(nk ? String(hv(row.getCell(nk)) || '') : '');
       const g = S.gun(t, true);
       g.kayitlar[p.id] = { seraId: sera.id, durum: d.durum, isler: isler.length ? isler : [{ is: '', toplam: p.toplamSira, kalan: 0 }], yerine: d.yerine, not: d.not };
