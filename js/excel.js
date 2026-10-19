@@ -120,7 +120,7 @@
     const g = S.gun(t);
     const seralar = S.d.seralar.filter((s) => gunPersoneli(t, s.id).length);
 
-    let isSayisi = 2;
+    let isSayisi = 1; // en fazla kaç iş girildiyse o kadar iş sütunu (boş 2. iş sütunu çıkmaz)
     seralar.forEach((s) =>
       gunPersoneli(t, s.id).forEach((p) => {
         const k = g && g.kayitlar[p.id];
